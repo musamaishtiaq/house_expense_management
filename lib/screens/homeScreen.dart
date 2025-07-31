@@ -59,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -163,12 +164,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   const Icon(Icons.refresh, size: 20),
                                   const SizedBox(width: 8),
-                                  Text('Refresh Records',
-                                  style: TextStyle(
-                                    fontFamily: 'OpenSans',
-                                    fontSize: 14,
-                                    color: color.AppColor.blackColor,
-                                  ),),
+                                  Text(
+                                    'Refresh Records',
+                                    style: TextStyle(
+                                      fontFamily: 'OpenSans',
+                                      fontSize: 14,
+                                      color: color.AppColor.blackColor,
+                                    ),
+                                  ),
                                 ],
                               ),
                               onTap: () {

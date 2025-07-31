@@ -177,7 +177,7 @@ class ExpenseDbHelper {
     // Calculate current month boundaries
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 1);
 
     // Query to join expenses with subcategories and group by category
     final results = await db.rawQuery('''
@@ -187,7 +187,7 @@ class ExpenseDbHelper {
       FROM expenses e
       JOIN expense_subcategories esc ON e.expense_subcategory_id = esc.id
       JOIN expense_categories ec ON esc.expense_category_id = ec.id
-      WHERE e.date_time BETWEEN ? AND ?
+      WHERE e.date_time >= ? AND e.date_time < ?
       GROUP BY ec.id
       ORDER BY total_amount DESC
     ''', [firstDayOfMonth.toIso8601String(), lastDayOfMonth.toIso8601String()]);
@@ -209,7 +209,7 @@ class ExpenseDbHelper {
     // Calculate current month boundaries
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 1);
 
     // Query to join expenses with subcategories and filter by category
     final results = await db.rawQuery('''
@@ -218,7 +218,7 @@ class ExpenseDbHelper {
         SUM(e.amount) as total_amount
       FROM expenses e
       JOIN expense_subcategories esc ON e.expense_subcategory_id = esc.id
-      WHERE e.date_time BETWEEN ? AND ?
+      WHERE e.date_time >= ? AND e.date_time < ?
       AND esc.expense_category_id = ?
       GROUP BY esc.id
       ORDER BY total_amount DESC
@@ -242,11 +242,11 @@ class ExpenseDbHelper {
     final db = await database;
     final now = DateTime.now();
     final firstDayOfEarliestMonth = DateTime(now.year, now.month - 2, 1);
-    final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 1);
     return await db.transaction((txn) async {
       final results = await txn.query(
         'expenses',
-        where: 'date_time BETWEEN ? AND ?',
+        where: 'date_time >= ? AND date_time < ?',
         whereArgs: [
           firstDayOfEarliestMonth.toIso8601String(),
           lastDayOfCurrentMonth.toIso8601String()
@@ -262,7 +262,7 @@ class ExpenseDbHelper {
     final db = await database;
     var result = await db.query(
       'expenses',
-      where: 'date_time BETWEEN ? AND ?',
+      where: 'date_time >= ? AND date_time < ?',
       whereArgs: [start.toIso8601String(), end.toIso8601String()],
     );
     return result.map((e) => Expense.fromMap(e)).toList();
@@ -334,11 +334,11 @@ class ExpenseDbHelper {
     final db = await database;
     final now = DateTime.now();
     final firstDayOfCurrentMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 1);
 
     final List<Map<String, dynamic>> maps = await db.query(
       'incomes',
-      where: 'date_time BETWEEN ? AND ?',
+      where: 'date_time >= ? AND date_time < ?',
       whereArgs: [
         firstDayOfCurrentMonth.toIso8601String(),
         lastDayOfCurrentMonth.toIso8601String()
@@ -354,11 +354,11 @@ class ExpenseDbHelper {
     final db = await database;
     final now = DateTime.now();
     final firstDayOfEarliestMonth = DateTime(now.year, now.month - 2, 1);
-    final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 0);
+    final lastDayOfCurrentMonth = DateTime(now.year, now.month + 1, 1);
 
     final List<Map<String, dynamic>> maps = await db.query(
       'incomes',
-      where: 'date_time BETWEEN ? AND ?',
+      where: 'date_time >= ? AND date_time < ?',
       whereArgs: [
         firstDayOfEarliestMonth.toIso8601String(),
         lastDayOfCurrentMonth.toIso8601String()
@@ -375,7 +375,7 @@ class ExpenseDbHelper {
     final db = await database;
     var result = await db.query(
       'incomes',
-      where: 'date_time BETWEEN ? AND ?',
+      where: 'date_time >= ? AND date_time < ?',
       whereArgs: [start.toIso8601String(), end.toIso8601String()],
     );
     return result.map((i) => Income.fromMap(i)).toList();
@@ -424,7 +424,7 @@ class ExpenseDbHelper {
       // Calculate month boundaries (going back from current month)
       final monthDate = DateTime(now.year, now.month - i, 1);
       final firstDayOfMonth = DateTime(monthDate.year, monthDate.month, 1);
-      final lastDayOfMonth = DateTime(monthDate.year, monthDate.month + 1, 0);
+      final lastDayOfMonth = DateTime(monthDate.year, monthDate.month + 1, 1);
 
       // Format month name (e.g., "Jan 2023")
       final monthName = dateFormat.format(firstDayOfMonth);
@@ -433,7 +433,7 @@ class ExpenseDbHelper {
       final incomeResult = await db.rawQuery('''
         SELECT SUM(amount) as total_income 
         FROM incomes 
-        WHERE date_time BETWEEN ? AND ?
+        WHERE date_time >= ? AND date_time < ?
       ''', [firstDayOfMonth.toIso8601String(), lastDayOfMonth.toIso8601String()]);
 
       final totalIncome = incomeResult.first['total_income'] as double? ?? 0.0;
@@ -442,7 +442,7 @@ class ExpenseDbHelper {
       final expenseResult = await db.rawQuery('''
         SELECT SUM(amount) as total_expense 
         FROM expenses 
-        WHERE date_time BETWEEN ? AND ?
+        WHERE date_time >= ? AND date_time < ?
       ''', [firstDayOfMonth.toIso8601String(), lastDayOfMonth.toIso8601String()]);
 
       final totalExpense =
