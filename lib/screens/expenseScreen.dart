@@ -95,19 +95,30 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       // Create monthly aggregates
       final Map<String, Expense> monthlyAggregates = {};
 
+      // Generate list of last 3 months including current
+      final List<DateTime> targetMonths = List.generate(3, (i) {
+        final month = _currentDate.month - i;
+        final year = _currentDate.year;
+        // Dart auto-adjusts months like DateTime(2025, -1) to proper values
+        return DateTime(year, month);
+      });
+
       for (final expense in _expenses) {
-        if (expense.dateTime.year == _currentDate.year &&
-            expense.dateTime.month == _currentDate.month) {
-          final key = '${expense.expenseSubCategoryId}';
+        final expenseMonth = DateTime(expense.dateTime.year, expense.dateTime.month);
+
+        // Check if the expense falls in any of the target months
+        if (targetMonths.any((m) => m.year == expenseMonth.year && m.month == expenseMonth.month)) {
+          final key = '${expense.expenseSubCategoryId}_${expenseMonth.year}_${expenseMonth.month}';
+
           if (monthlyAggregates.containsKey(key)) {
             monthlyAggregates[key]!.amount += expense.amount;
           } else {
             monthlyAggregates[key] = Expense(
               id: expense
-                  .expenseSubCategoryId, // Using subcategory ID as temporary ID
+                  .expenseSubCategoryId,
               expenseSubCategoryId: expense.expenseSubCategoryId,
               amount: expense.amount,
-              dateTime: DateTime(_currentDate.year, _currentDate.month),
+              dateTime: expenseMonth,
               description: 'Monthly Total',
             );
           }
@@ -533,7 +544,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ),
                   if (_showAggregated)
                     Text(
-                      '${_getEntryCount(expense.expenseSubCategoryId)} entries',
+                      '${_getEntryCount(expense.expenseSubCategoryId, expense.dateTime)} entries',
                       style: TextStyle(
                         color: Colors.grey[600],
                         fontSize: 12,
@@ -551,12 +562,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  int _getEntryCount(int subCategoryId) {
+  int _getEntryCount(int subCategoryId, DateTime date) {
     return _expenses
         .where((e) =>
             e.expenseSubCategoryId == subCategoryId &&
-            e.dateTime.year == _currentDate.year &&
-            e.dateTime.month == _currentDate.month)
+            e.dateTime.year == date.year &&
+            e.dateTime.month == date.month)
         .length;
   }
 }

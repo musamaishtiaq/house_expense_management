@@ -57,27 +57,35 @@ class _IncomeScreenState extends State<IncomeScreen> {
   void _applyFilter() {
     if (_showAggregated) {
       // Create monthly aggregates
-      final Map<int, Income> monthlyAggregates = {};
+      final Map<String, Income> monthlyAggregates = {};
+
+      // List of target months (current + past 2)
+      final List<DateTime> targetMonths = List.generate(3, (i) {
+        final month = _currentDate.month - i;
+        final year = _currentDate.year;
+        return DateTime(year, month);
+      });
 
       for (final income in _incomes) {
-        // Check if same month and year as current
-        if (income.dateTime.year == _currentDate.year &&
-            income.dateTime.month == _currentDate.month) {
-          if (monthlyAggregates.containsKey(income.salariedPersonId)) {
-            // Add to existing aggregate
-            monthlyAggregates[income.salariedPersonId]!.amount += income.amount;
-          } else {
-            // Create new aggregate
-            monthlyAggregates[income.salariedPersonId] = Income(
-              id: income.salariedPersonId,
-              salariedPersonId: income.salariedPersonId,
-              amount: income.amount,
-              dateTime: DateTime(_currentDate.year, _currentDate.month),
-              description: 'Monthly Total',
-            );
-          }
+      final incomeMonth = DateTime(income.dateTime.year, income.dateTime.month);
+
+      // Check if the income is from any of the target months
+      if (targetMonths.any((m) => m.year == incomeMonth.year && m.month == incomeMonth.month)) {
+        final key = '${income.salariedPersonId}_${incomeMonth.year}_${incomeMonth.month}';
+
+        if (monthlyAggregates.containsKey(key)) {
+          monthlyAggregates[key]!.amount += income.amount;
+        } else {
+          monthlyAggregates[key] = Income(
+            id: income.salariedPersonId, // key as unique ID (string)
+            salariedPersonId: income.salariedPersonId,
+            amount: income.amount,
+            dateTime: incomeMonth,
+            description: 'Monthly Total',
+          );
         }
       }
+    }
 
       _filteredIncomes = monthlyAggregates.values.toList();
     } else {
