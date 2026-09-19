@@ -1,0 +1,12 @@
+package=com.example.house_expense_management
+source_versionCode=1
+source_versionName=1.0.0
+phone_sha1=bd5c0a1c4acdf8497820cd95fbb8377dd19bd205
+backed_up=2026-09-19T14:15:59.4325426+05:00
+db_bytes=110592
+expenses=1510
+incomes=68
+salaried_persons=5
+expense_categories=6
+expense_subcategories=48
+integrity=ok
