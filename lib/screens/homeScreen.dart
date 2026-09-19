@@ -5,6 +5,7 @@ import '../screens/expenseScreen.dart';
 import '../screens/incomeScreen.dart';
 import '../screens/categoryScreen.dart';
 import '../screens/personScreen.dart';
+import '../screens/moreScreen.dart';
 import '../helper/colors.dart' as color;
 import '../helper/strings.dart' as string;
 import '../widgets/dbHelper.dart';
@@ -345,6 +346,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
+        type: BottomNavigationBarType.fixed,
         currentIndex: 0,
         onTap: (index) {
           if (index == 1) {
@@ -355,6 +357,9 @@ class _HomeScreenState extends State<HomeScreen> {
           } else if (index == 2) {
             Navigator.push(context,
                 MaterialPageRoute(builder: (context) => const PersonScreen()));
+          } else if (index == 3) {
+            Navigator.push(context,
+                MaterialPageRoute(builder: (context) => const MoreScreen()));
           }
         },
         selectedItemColor: color.AppColor.main1Color,
@@ -371,6 +376,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.person),
             label: 'Person',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.more_horiz),
+            label: 'More',
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import '../models/expenseSubCategory.dart';
 import '../models/expense.dart';
 import '../models/salariedPerson.dart';
 import '../models/income.dart';
+import '../models/appSettings.dart';
 
 class ExpenseDbHelper {
   static final ExpenseDbHelper _instance = ExpenseDbHelper._internal();
@@ -28,8 +29,9 @@ class ExpenseDbHelper {
     String path = join(await getDatabasesPath(), 'house_expense.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -84,6 +86,58 @@ class ExpenseDbHelper {
         FOREIGN KEY(salaried_person_id) REFERENCES salaried_persons(id)
       )
     ''');
+
+    await _createAppSettingsTable(db);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createAppSettingsTable(db);
+    }
+  }
+
+  Future<void> _createAppSettingsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE app_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hint_months INTEGER NOT NULL DEFAULT 3,
+        monthly_savings_target REAL NOT NULL DEFAULT 0.0
+      )
+    ''');
+
+    // Single default row for app preferences
+    await db.insert('app_settings', {
+      'hint_months': 3,
+      'monthly_savings_target': 0.0,
+    });
+  }
+
+  // App Settings operations
+  Future<AppSettings> getAppSettings() async {
+    final db = await database;
+    final result = await db.query('app_settings', limit: 1);
+    if (result.isEmpty) {
+      final id = await db.insert('app_settings', {
+        'hint_months': 3,
+        'monthly_savings_target': 0.0,
+      });
+      return AppSettings(id: id);
+    }
+    return AppSettings.fromMap(result.first);
+  }
+
+  Future<int> updateAppSettings(AppSettings settings) async {
+    final db = await database;
+    final existing = await getAppSettings();
+    return await db.update(
+      'app_settings',
+      {
+        'hint_months': settings.hintMonths,
+        'monthly_savings_target': settings.monthlySavingsTarget,
+      },
+      where: 'id = ?',
+      whereArgs: [existing.id],
+    );
   }
 
   // Expense Category operations
@@ -463,5 +517,114 @@ class ExpenseDbHelper {
 
     // Reverse to show oldest first (optional - remove if you want newest first)
     return monthlySummaries;
+  }
+
+  /// Average monthly spend per category over [months] completed months (excludes current).
+  Future<Map<int, double>> getAverageMonthlyExpensesByCategory(
+      int months) async {
+    final db = await database;
+    final range = _completedMonthsRange(months);
+
+    final results = await db.rawQuery('''
+      SELECT
+        ec.id as category_id,
+        SUM(e.amount) as total_amount
+      FROM expenses e
+      JOIN expense_subcategories esc ON e.expense_subcategory_id = esc.id
+      JOIN expense_categories ec ON esc.expense_category_id = ec.id
+      WHERE e.date_time >= ? AND e.date_time < ?
+      GROUP BY ec.id
+    ''', [range[0].toIso8601String(), range[1].toIso8601String()]);
+
+    final Map<int, double> averages = {};
+    for (final row in results) {
+      final total = (row['total_amount'] as num?)?.toDouble() ?? 0.0;
+      averages[row['category_id'] as int] = total / months;
+    }
+    return averages;
+  }
+
+  /// Average monthly spend per subcategory over [months] completed months (excludes current).
+  Future<Map<int, double>> getAverageMonthlyExpensesBySubCategory(
+      int months) async {
+    final db = await database;
+    final range = _completedMonthsRange(months);
+
+    final results = await db.rawQuery('''
+      SELECT
+        esc.id as subcategory_id,
+        SUM(e.amount) as total_amount
+      FROM expenses e
+      JOIN expense_subcategories esc ON e.expense_subcategory_id = esc.id
+      WHERE e.date_time >= ? AND e.date_time < ?
+      GROUP BY esc.id
+    ''', [range[0].toIso8601String(), range[1].toIso8601String()]);
+
+    final Map<int, double> averages = {};
+    for (final row in results) {
+      final total = (row['total_amount'] as num?)?.toDouble() ?? 0.0;
+      averages[row['subcategory_id'] as int] = total / months;
+    }
+    return averages;
+  }
+
+  Future<Map<int, double>> getCurrentMonthExpensesByAllSubCategories() async {
+    final db = await database;
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 1);
+
+    final results = await db.rawQuery('''
+      SELECT
+        esc.id as subcategory_id,
+        SUM(e.amount) as total_amount
+      FROM expenses e
+      JOIN expense_subcategories esc ON e.expense_subcategory_id = esc.id
+      WHERE e.date_time >= ? AND e.date_time < ?
+      GROUP BY esc.id
+    ''', [firstDayOfMonth.toIso8601String(), lastDayOfMonth.toIso8601String()]);
+
+    final Map<int, double> totals = {};
+    for (final row in results) {
+      totals[row['subcategory_id'] as int] =
+          (row['total_amount'] as num?)?.toDouble() ?? 0.0;
+    }
+    return totals;
+  }
+
+  Future<double> getCurrentMonthTotalExpenses() async {
+    final db = await database;
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 1);
+
+    final result = await db.rawQuery('''
+      SELECT SUM(amount) as total FROM expenses
+      WHERE date_time >= ? AND date_time < ?
+    ''', [firstDayOfMonth.toIso8601String(), lastDayOfMonth.toIso8601String()]);
+
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  Future<double> getCurrentMonthTotalIncome() async {
+    final db = await database;
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 1);
+
+    final result = await db.rawQuery('''
+      SELECT SUM(amount) as total FROM incomes
+      WHERE date_time >= ? AND date_time < ?
+    ''', [firstDayOfMonth.toIso8601String(), lastDayOfMonth.toIso8601String()]);
+
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// Start of first completed month (inclusive) and start of current month (exclusive).
+  List<DateTime> _completedMonthsRange(int months) {
+    final now = DateTime.now();
+    final end = DateTime(now.year, now.month, 1);
+    final start = DateTime(now.year, now.month - months, 1);
+    return [start, end];
   }
 }
