@@ -2,11 +2,15 @@ class ExpenseSubCategory {
   int? id;
   String title;
   int expenseCategoryId;
+  int orderIndex;
+  double budget;
 
   ExpenseSubCategory({
     this.id,
     required this.title,
     required this.expenseCategoryId,
+    this.orderIndex = 0,
+    this.budget = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -14,6 +18,8 @@ class ExpenseSubCategory {
       'id': id,
       'title': title,
       'expense_category_id': expenseCategoryId,
+      'order_index': orderIndex,
+      'budget': budget,
     };
   }
 
@@ -22,6 +28,8 @@ class ExpenseSubCategory {
       id: map['id'],
       title: map['title'],
       expenseCategoryId: map['expense_category_id'],
+      orderIndex: map['order_index'] as int? ?? 0,
+      budget: (map['budget'] as num?)?.toDouble() ?? 0,
     );
   }
 }

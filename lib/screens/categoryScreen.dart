@@ -3,8 +3,9 @@ import 'package:intl/intl.dart';
 
 import '../screens/subCategoryScreen.dart';
 import '../models/expenseCategory.dart';
+import '../helper/colors.dart';
+import '../widgets/appWidgets.dart';
 import '../widgets/dbHelper.dart';
-import '../helper/colors.dart' as color;
 
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({super.key});
@@ -19,6 +20,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   ExpenseCategory? _editingCategory;
   bool _showAmount = false;
   Map<int, double> _monthlyExpense = {};
+  Map<int, double> _categoryBudgets = {};
 
   @override
   void initState() {
@@ -35,8 +37,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
 
   Future<void> _loadCategories() async {
     final categories = await _dbHelper.getAllExpenseCategories();
+    final subCategories = await _dbHelper.getAllSubCategories();
+    final Map<int, double> budgets = {};
+    for (final sub in subCategories) {
+      budgets[sub.expenseCategoryId] =
+          (budgets[sub.expenseCategoryId] ?? 0) + sub.budget;
+    }
     setState(() {
       _categories = categories;
+      _categoryBudgets = budgets;
     });
   }
 
@@ -53,6 +62,10 @@ class _CategoryScreenState extends State<CategoryScreen> {
         : 0;
   }
 
+  double _fetchCategoryBudget(int categoryId) {
+    return _categoryBudgets[categoryId] ?? 0;
+  }
+
   void _showCategoryDialog({ExpenseCategory? category}) {
     _editingCategory = category;
     _titleController.text = category?.title ?? '';
@@ -60,9 +73,9 @@ class _CategoryScreenState extends State<CategoryScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.grey[100], // Light gray background
+        backgroundColor: AppColor.card,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -74,27 +87,14 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: color.AppColor.main1Color,
+                  color: AppColor.primary,
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: 'Category Name',
-                  labelStyle: TextStyle(color: Colors.grey[700]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.grey[400]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: color.AppColor.main1Color),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                cursorColor: color.AppColor.blackColor,
+                decoration: appInputDecoration(label: 'Category Name'),
+                cursorColor: AppColor.textPrimary,
                 autofocus: true,
               ),
               const SizedBox(height: 24),
@@ -102,21 +102,11 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
-                    ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color.AppColor.main1Color,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
                     onPressed: () async {
                       if (_titleController.text.trim().isEmpty) return;
 
@@ -153,14 +143,27 @@ class _CategoryScreenState extends State<CategoryScreen> {
     _loadCategories();
   }
 
+  Future<void> _onReorder(int oldIndex, int newIndex) async {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final category = _categories.removeAt(oldIndex);
+      _categories.insert(newIndex, category);
+    });
+    await _dbHelper.updateExpenseCategoriesOrder(_categories);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColor.pageBackground,
       appBar: AppBar(
         title: const Text('Expense Categories'),
+        automaticallyImplyLeading: false,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           children: [
             if (_categories.isEmpty)
@@ -174,64 +177,96 @@ class _CategoryScreenState extends State<CategoryScreen> {
               )
             else
               Expanded(
-                child: ListView.builder(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   itemCount: _categories.length,
+                  onReorder: _onReorder,
                   itemBuilder: (context, index) {
                     final category = _categories[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      color: Colors.grey[50],
-                      child: ListTile(
-                        title: Text(
-                          category.title,
-                          style: TextStyle(color: color.AppColor.gray1Color),
-                        ),
-                        trailing: InkWell(
-                          child: Text(
-                            _showAmount ? NumberFormat('#,##0').format(_fetchCategoryExpense(category.id!)) : "****",
-                            style: TextStyle(
-                              color: color.AppColor.main1Color,
-                              fontWeight: FontWeight.bold,
-                            ),
+                    final actual = _fetchCategoryExpense(category.id!);
+                    final budget = _fetchCategoryBudget(category.id!);
+                    final overBudget = budget > 0 && actual > budget;
+                    return AppCard(
+                      key: ValueKey(category.id),
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                SubCategoryScreen(category: category),
                           ),
-                          onDoubleTap: () {
-                            setState(() {
-                              _showAmount = !_showAmount;
-                            });
-                          },
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) =>
-                                  SubCategoryScreen(category: category),
-                            ),
-                          );
-                        },
-                        onLongPress: () =>
-                            _showCategoryDialog(category: category),
+                        );
+                        _loadCategories();
+                        _loadData();
+                      },
+                      onLongPress: () =>
+                          _showCategoryDialog(category: category),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Icon(
+                                  Icons.drag_handle,
+                                  color: AppColor.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  category.title,
+                                  style: const TextStyle(
+                                    color: AppColor.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              InkWell(
+                                onDoubleTap: () {
+                                  setState(() {
+                                    _showAmount = !_showAmount;
+                                  });
+                                },
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      _showAmount
+                                          ? NumberFormat('#,##0').format(actual)
+                                          : '****',
+                                      style: TextStyle(
+                                        color: overBudget
+                                            ? AppColor.expense
+                                            : AppColor.primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (budget > 0)
+                                      Text(
+                                        _showAmount
+                                            ? 'Budget ${NumberFormat('#,##0').format(budget)}'
+                                            : 'Budget ****',
+                                        style: const TextStyle(
+                                          color: AppColor.textSecondary,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          AppBudgetBar(actual: actual, budget: budget),
+                        ],
                       ),
                     );
                   },
                 ),
               ),
-            const SizedBox(
-              height: 12,
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color.AppColor.main1Color,
-                foregroundColor: color.AppColor.whiteColor,
-                elevation: 5,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                minimumSize: const Size(double.infinity, 48),
-              ),
-              child: const Text('Add Category'),
+            const SizedBox(height: 12),
+            AppPrimaryButton(
+              label: 'Add Category',
               onPressed: () => _showCategoryDialog(),
             ),
           ],

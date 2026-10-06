@@ -1,12 +1,14 @@
 class SalariedPerson {
   int? id;
   String title;
-  String? description; // Added optional description field
+  String? description;
+  int orderIndex;
 
   SalariedPerson({
     this.id,
     required this.title,
     this.description,
+    this.orderIndex = 0,
   });
 
   Map<String, dynamic> toMap() {
@@ -14,6 +16,7 @@ class SalariedPerson {
       'id': id,
       'title': title,
       'description': description,
+      'order_index': orderIndex,
     };
   }
 
@@ -22,6 +25,7 @@ class SalariedPerson {
       id: map['id'],
       title: map['title'],
       description: map['description'],
+      orderIndex: map['order_index'] as int? ?? 0,
     );
   }
 }

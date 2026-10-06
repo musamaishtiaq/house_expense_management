@@ -4,8 +4,9 @@ import 'package:intl/intl.dart';
 import '../models/expense.dart';
 import '../models/expenseCategory.dart';
 import '../models/expenseSubCategory.dart';
+import '../helper/colors.dart';
+import '../widgets/appWidgets.dart';
 import '../widgets/dbHelper.dart';
-import '../helper/colors.dart' as color;
 
 class ExpenseScreen extends StatefulWidget {
   const ExpenseScreen({super.key});
@@ -23,7 +24,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   List<ExpenseSubCategory> _allSubCategories = [];
   Expense? _expense;
   bool _showAggregated = false;
-  final DateTime _currentDate = DateTime.now();
+  int? _expandedSubCategoryId;
+  late DateTime _rangeStart;
+  late DateTime _rangeEnd;
 
   // For expense dialog
   ExpenseCategory? _selectedCategory;
@@ -36,6 +39,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _rangeStart = DateTime(now.year, now.month, 1);
+    _rangeEnd = DateTime(now.year, now.month, now.day);
     _loadAllSubCategories();
     _loadCategories();
     _loadData();
@@ -49,8 +55,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     super.dispose();
   }
 
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
   Future<void> _loadData() async {
-    final expenses = await _dbHelper.getLast3MonthsExpenses();
+    final start = _dateOnly(_rangeStart);
+    final endExclusive = _dateOnly(_rangeEnd).add(const Duration(days: 1));
+    final expenses = await _dbHelper.getExpensesByDateRange(start, endExclusive);
 
     setState(() {
       _expenses = expenses;
@@ -76,10 +87,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
   }
 
+  Future<List<ExpenseSubCategory>> _fetchSubCategories(int categoryId) async {
+    return _dbHelper.getSubCategoriesForCategory(categoryId);
+  }
+
   Future<void> _loadSubCategories(int categoryId) async {
-    final subCategories = _allSubCategories
-        .where((sc) => sc.expenseCategoryId == categoryId)
-        .toList();
+    final subCategories = await _fetchSubCategories(categoryId);
+    if (!mounted) return;
     setState(() {
       _subCategories = subCategories;
       if (subCategories.isNotEmpty) {
@@ -92,54 +106,93 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   void _applyFilter() {
     if (_showAggregated) {
-      // Create monthly aggregates
-      final Map<String, Expense> monthlyAggregates = {};
-
-      // Generate list of last 3 months including current
-      final List<DateTime> targetMonths = List.generate(3, (i) {
-        final month = _currentDate.month - i;
-        final year = _currentDate.year;
-        // Dart auto-adjusts months like DateTime(2025, -1) to proper values
-        return DateTime(year, month);
-      });
-
+      final Map<int, Expense> aggregates = {};
       for (final expense in _expenses) {
-        final expenseMonth = DateTime(expense.dateTime.year, expense.dateTime.month);
-
-        // Check if the expense falls in any of the target months
-        if (targetMonths.any((m) => m.year == expenseMonth.year && m.month == expenseMonth.month)) {
-          final key = '${expense.expenseSubCategoryId}_${expenseMonth.year}_${expenseMonth.month}';
-
-          if (monthlyAggregates.containsKey(key)) {
-            monthlyAggregates[key]!.amount += expense.amount;
-          } else {
-            monthlyAggregates[key] = Expense(
-              id: expense
-                  .expenseSubCategoryId,
-              expenseSubCategoryId: expense.expenseSubCategoryId,
-              amount: expense.amount,
-              dateTime: expenseMonth,
-              description: 'Monthly Total',
-            );
-          }
+        final key = expense.expenseSubCategoryId;
+        if (aggregates.containsKey(key)) {
+          aggregates[key]!.amount += expense.amount;
+        } else {
+          aggregates[key] = Expense(
+            id: expense.expenseSubCategoryId,
+            expenseSubCategoryId: expense.expenseSubCategoryId,
+            amount: expense.amount,
+            dateTime: expense.dateTime,
+            description: 'Range Total',
+          );
         }
       }
-
-      _filteredExpenses = monthlyAggregates.values.toList();
+      _filteredExpenses = aggregates.values.toList();
     } else {
       _filteredExpenses = List.from(_expenses);
     }
   }
 
+  Future<void> _pickRangeDate({required bool isStart}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStart ? _rangeStart : _rangeEnd,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColor.primary,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColor.primary,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _rangeStart = _dateOnly(picked);
+        if (_rangeStart.isAfter(_rangeEnd)) {
+          _rangeEnd = _rangeStart;
+        }
+      } else {
+        _rangeEnd = _dateOnly(picked);
+        if (_rangeEnd.isBefore(_rangeStart)) {
+          _rangeStart = _rangeEnd;
+        }
+      }
+    });
+    await _loadData();
+  }
+
   void _toggleFilter() {
     setState(() {
       _showAggregated = !_showAggregated;
+      _expandedSubCategoryId = null;
       _applyFilter();
     });
   }
 
-  void _showExpenseDialog({Expense? expense}) {
+  void _toggleSubCategoryExpand(int subCategoryId) {
+    setState(() {
+      _expandedSubCategoryId =
+          _expandedSubCategoryId == subCategoryId ? null : subCategoryId;
+    });
+  }
+
+  Future<void> _showExpenseDialog({Expense? expense}) async {
     _expense = expense;
+
+    final categories = await _dbHelper.getAllExpenseCategories();
+    final allSubs = await _dbHelper.getAllSubCategories();
+    if (!mounted) return;
+
+    _categories = categories;
+    _allSubCategories = allSubs;
 
     _selectedDate = _expense?.dateTime ?? DateTime.now();
     _dateController.text =
@@ -147,27 +200,38 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (_expense != null) {
       _amountController.text = _expense?.amount.toStringAsFixed(0) ?? '';
       _descriptionController.text = _expense?.description ?? '';
-      final subCat = _allSubCategories.firstWhere(
+      final subCat = allSubs.firstWhere(
         (sc) => sc.id == expense?.expenseSubCategoryId,
-        orElse: () => _subCategories.first,
+        orElse: () => allSubs.isNotEmpty
+            ? allSubs.first
+            : ExpenseSubCategory(title: '', expenseCategoryId: 0),
       );
-      final cat = _categories.firstWhere(
+      final cat = categories.firstWhere(
         (c) => c.id == subCat.expenseCategoryId,
-        orElse: () => _categories.first,
+        orElse: () => categories.first,
       );
-      _loadSubCategories(cat.id!);
-
+      _subCategories = await _fetchSubCategories(cat.id!);
       _selectedCategory = cat;
-      _selectedSubCategory = subCat;
+      _selectedSubCategory = _subCategories.firstWhere(
+        (sc) => sc.id == subCat.id,
+        orElse: () =>
+            _subCategories.isNotEmpty ? _subCategories.first : subCat,
+      );
     } else {
       _amountController.clear();
       _descriptionController.clear();
-      _selectedCategory = _categories.isNotEmpty ? _categories.first : null;
-      _loadSubCategories(_categories.first.id!);
-
-      _selectedSubCategory =
-          _subCategories.isNotEmpty ? _subCategories.first : null;
+      _selectedCategory = categories.isNotEmpty ? categories.first : null;
+      if (_selectedCategory != null) {
+        _subCategories =
+            await _fetchSubCategories(_selectedCategory!.id!);
+        _selectedSubCategory =
+            _subCategories.isNotEmpty ? _subCategories.first : null;
+      } else {
+        _subCategories = [];
+        _selectedSubCategory = null;
+      }
     }
+    if (!mounted) return;
     setState(() {});
 
     showDialog(
@@ -185,14 +249,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   return Theme(
                     data: Theme.of(context).copyWith(
                       colorScheme: ColorScheme.light(
-                        primary: color.AppColor.main1Color, // Header color
+                        primary: AppColor.primary, // Header color
                         onPrimary: Colors.white, // Header text color
                         onSurface: Colors.black, // Calendar text color
                       ),
                       textButtonTheme: TextButtonThemeData(
                         style: TextButton.styleFrom(
                           foregroundColor:
-                              color.AppColor.main1Color, // Button color
+                              AppColor.primary, // Button color
                         ),
                       ),
                     ),
@@ -211,9 +275,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             }
 
             return Dialog(
-              backgroundColor: Colors.grey[100],
+              backgroundColor: AppColor.card,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16.0),
@@ -225,7 +289,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: color.AppColor.main1Color,
+                        color: AppColor.primary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -233,27 +297,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     // Category Dropdown
                     DropdownButtonFormField<ExpenseCategory>(
                       value: _selectedCategory,
-                      decoration: InputDecoration(
-                        labelText: 'Category',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
+                      decoration: appInputDecoration(label: 'Category'),
                       items: _categories.map((category) {
                         return DropdownMenuItem<ExpenseCategory>(
                           value: category,
                           child: Text(category.title),
                         );
                       }).toList(),
-                      onChanged: (category) {
+                      onChanged: (category) async {
+                        if (category == null) return;
+                        final subCategories =
+                            await _fetchSubCategories(category.id!);
                         setState(() {
                           _selectedCategory = category;
-                          _selectedSubCategory = null;
-                          _loadSubCategories(category!.id!);
+                          _subCategories = subCategories;
+                          _selectedSubCategory = subCategories.isNotEmpty
+                              ? subCategories.first
+                              : null;
                         });
                       },
                     ),
@@ -262,16 +322,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     // Subcategory Dropdown
                     DropdownButtonFormField<ExpenseSubCategory>(
                       value: _selectedSubCategory,
-                      decoration: InputDecoration(
-                        labelText: 'Subcategory',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
+                      decoration: appInputDecoration(label: 'Subcategory'),
                       items: _subCategories.map((subCategory) {
                         return DropdownMenuItem<ExpenseSubCategory>(
                           value: subCategory,
@@ -289,18 +340,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     // Amount Field
                     TextField(
                       controller: _amountController,
-                      decoration: InputDecoration(
-                        labelText: 'Amount',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
+                      decoration: appInputDecoration(
+                        label: 'Amount',
                         prefixText: 'Rs ',
                       ),
-                      cursorColor: color.AppColor.blackColor,
+                      cursorColor: AppColor.textPrimary,
                       keyboardType:
                           TextInputType.numberWithOptions(decimal: true),
                     ),
@@ -310,18 +354,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     TextField(
                       controller: _dateController,
                       readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: 'Date',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
+                      decoration: appInputDecoration(
+                        label: 'Date',
                         suffixIcon: IconButton(
-                          icon: Icon(Icons.calendar_today,
-                              color: color.AppColor.main1Color),
+                          icon: const Icon(Icons.calendar_today,
+                              color: AppColor.primary),
                           onPressed: selectDate,
                         ),
                       ),
@@ -332,17 +369,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     // Description Field
                     TextField(
                       controller: _descriptionController,
-                      decoration: InputDecoration(
-                        labelText: 'Description (Optional)',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
+                      decoration: appInputDecoration(
+                        label: 'Description (Optional)',
                       ),
-                      cursorColor: color.AppColor.blackColor,
+                      cursorColor: AppColor.textPrimary,
                       maxLines: 2,
                     ),
                     const SizedBox(height: 24),
@@ -352,21 +382,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.grey[700],
-                          ),
                           onPressed: () => Navigator.pop(context),
                           child: const Text('Cancel'),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: color.AppColor.main1Color,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
                           onPressed: () async {
                             if (_selectedSubCategory == null ||
                                 _amountController.text.isEmpty) return;
@@ -426,6 +446,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColor.pageBackground,
       appBar: AppBar(
         title: const Text('Expense Records'),
         actions: [
@@ -435,47 +456,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             onPressed: _toggleFilter,
             tooltip: _showAggregated
                 ? 'Show All Entries'
-                : 'Show Monthly Aggregates',
+                : 'Show Subcategory Totals',
           ),
         ],
       ),
       body: Column(
         children: [
-          Container(
-            alignment: Alignment.centerLeft,
-            height: 32,
-            width: MediaQuery.of(context).size.width,
-            color: color.AppColor.gray1Color,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: Text(
-                'Last 3 Months',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildRangeDateField(
+                    label: 'Start',
+                    date: _rangeStart,
+                    onTap: () => _pickRangeDate(isStart: true),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildRangeDateField(
+                    label: 'End',
+                    date: _rangeEnd,
+                    onTap: () => _pickRangeDate(isStart: false),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: [
                   _buildExpenseList(),
-                  const SizedBox(
-                    height: 12,
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color.AppColor.main1Color,
-                      foregroundColor: Colors.white,
-                      elevation: 5,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    child: const Text('Add Expense'),
+                  const SizedBox(height: 12),
+                  AppPrimaryButton(
+                    label: 'Add Expense',
                     onPressed: () => _showExpenseDialog(),
                   ),
                 ],
@@ -520,41 +537,45 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ),
           );
 
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            color: Colors.grey[50],
-            child: ListTile(
-              title: Text(subCategory.title),
-              subtitle: Text(
-                _showAggregated
-                    ? '${expense.dateTime.month}/${expense.dateTime.year}'
-                    : '${expense.dateTime.day}/${expense.dateTime.month}/${expense.dateTime.year}',
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    NumberFormat('#,##0').format(expense.amount),
-                    style: TextStyle(
-                      color: color.AppColor.main1Color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  if (_showAggregated)
-                    Text(
-                      '${_getEntryCount(expense.expenseSubCategoryId, expense.dateTime)} entries',
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
+          if (_showAggregated) {
+            return _buildAggregatedExpenseCard(
+                expense, subCategory, category);
+          }
+
+          return AppCard(
+            onLongPress: () => _showExpenseDialog(expense: expense),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        subCategory.title,
+                        style: const TextStyle(
+                          color: AppColor.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                ],
-              ),
-              onLongPress: () =>
-                  _showAggregated ? {} : _showExpenseDialog(expense: expense),
+                      Text(
+                        '${expense.dateTime.day}/${expense.dateTime.month}/${expense.dateTime.year}',
+                        style: const TextStyle(
+                          color: AppColor.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  NumberFormat('#,##0').format(expense.amount),
+                  style: const TextStyle(
+                    color: AppColor.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
             ),
           );
         },
@@ -562,12 +583,136 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  int _getEntryCount(int subCategoryId, DateTime date) {
+  Widget _buildRangeDateField({
+    required String label,
+    required DateTime date,
+    required VoidCallback onTap,
+  }) {
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppColor.textSecondary, fontSize: 11),
+          ),
+          Text(
+            '${date.day}/${date.month}/${date.year}',
+            style: const TextStyle(
+              color: AppColor.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAggregatedExpenseCard(
+    Expense expense,
+    ExpenseSubCategory subCategory,
+    ExpenseCategory category,
+  ) {
+    final isExpanded = _expandedSubCategoryId == expense.expenseSubCategoryId;
+    final entries = _entriesForSubCategory(expense.expenseSubCategoryId);
+    final overBudget =
+        subCategory.budget > 0 && expense.amount > subCategory.budget;
+
+    return AppCard(
+      onTap: () => _toggleSubCategoryExpand(expense.expenseSubCategoryId),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      subCategory.title,
+                      style: const TextStyle(
+                        color: AppColor.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      '${category.title} · ${entries.length} entries',
+                      style: const TextStyle(
+                        color: AppColor.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    NumberFormat('#,##0').format(expense.amount),
+                    style: TextStyle(
+                      color: overBudget ? AppColor.expense : AppColor.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (subCategory.budget > 0)
+                    Text(
+                      'Budget ${NumberFormat('#,##0').format(subCategory.budget)}',
+                      style: const TextStyle(
+                        color: AppColor.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                ],
+              ),
+              Icon(
+                isExpanded ? Icons.expand_less : Icons.expand_more,
+                color: AppColor.textSecondary,
+              ),
+            ],
+          ),
+          AppBudgetBar(actual: expense.amount, budget: subCategory.budget),
+          if (isExpanded)
+            ...entries.map((entry) {
+              return InkWell(
+                onLongPress: () => _showExpenseDialog(expense: entry),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${entry.dateTime.day}/${entry.dateTime.month}/${entry.dateTime.year}',
+                          style: const TextStyle(
+                            color: AppColor.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        NumberFormat('#,##0').format(entry.amount),
+                        style: const TextStyle(
+                          color: AppColor.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  List<Expense> _entriesForSubCategory(int subCategoryId) {
     return _expenses
-        .where((e) =>
-            e.expenseSubCategoryId == subCategoryId &&
-            e.dateTime.year == date.year &&
-            e.dateTime.month == date.month)
-        .length;
+        .where((e) => e.expenseSubCategoryId == subCategoryId)
+        .toList();
   }
 }

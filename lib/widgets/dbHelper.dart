@@ -29,7 +29,7 @@ class ExpenseDbHelper {
     String path = join(await getDatabasesPath(), 'house_expense.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -40,7 +40,8 @@ class ExpenseDbHelper {
     await db.execute('''
       CREATE TABLE expense_categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL
+        title TEXT NOT NULL,
+        order_index INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -50,6 +51,8 @@ class ExpenseDbHelper {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         expense_category_id INTEGER NOT NULL,
+        order_index INTEGER NOT NULL DEFAULT 0,
+        budget REAL NOT NULL DEFAULT 0,
         FOREIGN KEY(expense_category_id) REFERENCES expense_categories(id)
       )
     ''');
@@ -71,7 +74,8 @@ class ExpenseDbHelper {
       CREATE TABLE salaried_persons (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
-        description TEXT
+        description TEXT,
+        order_index INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
@@ -94,6 +98,31 @@ class ExpenseDbHelper {
     if (oldVersion < 2) {
       await _createAppSettingsTable(db);
     }
+    if (oldVersion < 3) {
+      await _addOrderIndexColumns(db);
+    }
+    if (oldVersion < 4) {
+      await db.execute(
+        'ALTER TABLE expense_subcategories ADD COLUMN budget REAL NOT NULL DEFAULT 0',
+      );
+    }
+  }
+
+  /// Adds order_index to reorderable tables and backfills from existing ids.
+  Future<void> _addOrderIndexColumns(Database db) async {
+    await db.execute(
+      'ALTER TABLE expense_categories ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE expense_subcategories ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0',
+    );
+    await db.execute(
+      'ALTER TABLE salaried_persons ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0',
+    );
+
+    await db.execute('UPDATE expense_categories SET order_index = id');
+    await db.execute('UPDATE expense_subcategories SET order_index = id');
+    await db.execute('UPDATE salaried_persons SET order_index = id');
   }
 
   Future<void> _createAppSettingsTable(Database db) async {
@@ -143,23 +172,45 @@ class ExpenseDbHelper {
   // Expense Category operations
   Future<int> insertExpenseCategory(ExpenseCategory category) async {
     final db = await database;
+    category.orderIndex =
+        await _nextOrderIndex(db, 'expense_categories');
     return await db.insert('expense_categories', category.toMap());
   }
 
   Future<List<ExpenseCategory>> getAllExpenseCategories() async {
     final db = await database;
-    var result = await db.query('expense_categories');
+    var result = await db.query(
+      'expense_categories',
+      orderBy: 'order_index ASC, id ASC',
+    );
     return result.map((c) => ExpenseCategory.fromMap(c)).toList();
   }
 
   Future<int> updateExpenseCategory(ExpenseCategory category) async {
     final db = await database;
+    // Title-only update so edit screens do not reset order_index.
     return await db.update(
       'expense_categories',
-      category.toMap(),
+      {'title': category.title},
       where: 'id = ?',
       whereArgs: [category.id],
     );
+  }
+
+  Future<void> updateExpenseCategoriesOrder(
+      List<ExpenseCategory> categories) async {
+    final db = await database;
+    final batch = db.batch();
+    for (var i = 0; i < categories.length; i++) {
+      categories[i].orderIndex = i;
+      batch.update(
+        'expense_categories',
+        {'order_index': i},
+        where: 'id = ?',
+        whereArgs: [categories[i].id],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<int> deleteExpenseCategory(int id) async {
@@ -174,12 +225,21 @@ class ExpenseDbHelper {
   // Expense SubCategory operations
   Future<int> insertExpenseSubCategory(ExpenseSubCategory subCategory) async {
     final db = await database;
+    subCategory.orderIndex = await _nextOrderIndex(
+      db,
+      'expense_subcategories',
+      where: 'expense_category_id = ?',
+      whereArgs: [subCategory.expenseCategoryId],
+    );
     return await db.insert('expense_subcategories', subCategory.toMap());
   }
 
   Future<List<ExpenseSubCategory>> getAllSubCategories() async {
     final db = await database;
-    var result = await db.query('expense_subcategories');
+    var result = await db.query(
+      'expense_subcategories',
+      orderBy: 'expense_category_id ASC, order_index ASC, id ASC',
+    );
     return result.map((sc) => ExpenseSubCategory.fromMap(sc)).toList();
   }
 
@@ -190,18 +250,40 @@ class ExpenseDbHelper {
       'expense_subcategories',
       where: 'expense_category_id = ?',
       whereArgs: [categoryId],
+      orderBy: 'order_index ASC, id ASC',
     );
     return result.map((sc) => ExpenseSubCategory.fromMap(sc)).toList();
   }
 
   Future<int> updateExpenseSubCategory(ExpenseSubCategory subCategory) async {
     final db = await database;
+    // Title/category/budget update so edit screens do not reset order_index.
     return await db.update(
       'expense_subcategories',
-      subCategory.toMap(),
+      {
+        'title': subCategory.title,
+        'expense_category_id': subCategory.expenseCategoryId,
+        'budget': subCategory.budget,
+      },
       where: 'id = ?',
       whereArgs: [subCategory.id],
     );
+  }
+
+  Future<void> updateExpenseSubCategoriesOrder(
+      List<ExpenseSubCategory> subCategories) async {
+    final db = await database;
+    final batch = db.batch();
+    for (var i = 0; i < subCategories.length; i++) {
+      subCategories[i].orderIndex = i;
+      batch.update(
+        'expense_subcategories',
+        {'order_index': i},
+        where: 'id = ?',
+        whereArgs: [subCategories[i].id],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<int> deleteExpenseSubCategory(int id) async {
@@ -318,6 +400,7 @@ class ExpenseDbHelper {
       'expenses',
       where: 'date_time >= ? AND date_time < ?',
       whereArgs: [start.toIso8601String(), end.toIso8601String()],
+      orderBy: 'id DESC',
     );
     return result.map((e) => Expense.fromMap(e)).toList();
   }
@@ -344,23 +427,47 @@ class ExpenseDbHelper {
   // Salaried Person operations
   Future<int> insertSalariedPerson(SalariedPerson person) async {
     final db = await database;
+    person.orderIndex = await _nextOrderIndex(db, 'salaried_persons');
     return await db.insert('salaried_persons', person.toMap());
   }
 
   Future<List<SalariedPerson>> getAllSalariedPersons() async {
     final db = await database;
-    var result = await db.query('salaried_persons');
+    var result = await db.query(
+      'salaried_persons',
+      orderBy: 'order_index ASC, id ASC',
+    );
     return result.map((p) => SalariedPerson.fromMap(p)).toList();
   }
 
   Future<int> updateSalariedPerson(SalariedPerson person) async {
     final db = await database;
+    // Title/description-only update so edit screens do not reset order_index.
     return await db.update(
       'salaried_persons',
-      person.toMap(),
+      {
+        'title': person.title,
+        'description': person.description,
+      },
       where: 'id = ?',
       whereArgs: [person.id],
     );
+  }
+
+  Future<void> updateSalariedPersonsOrder(
+      List<SalariedPerson> persons) async {
+    final db = await database;
+    final batch = db.batch();
+    for (var i = 0; i < persons.length; i++) {
+      persons[i].orderIndex = i;
+      batch.update(
+        'salaried_persons',
+        {'order_index': i},
+        where: 'id = ?',
+        whereArgs: [persons[i].id],
+      );
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<int> deleteSalariedPerson(int id) async {
@@ -370,6 +477,21 @@ class ExpenseDbHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
+  }
+
+  Future<int> _nextOrderIndex(
+    DatabaseExecutor db,
+    String table, {
+    String? where,
+    List<Object?>? whereArgs,
+  }) async {
+    final result = await db.rawQuery(
+      'SELECT MAX(order_index) as max_index FROM $table'
+      '${where != null ? ' WHERE $where' : ''}',
+      whereArgs,
+    );
+    final maxIndex = result.first['max_index'] as int? ?? -1;
+    return maxIndex + 1;
   }
 
   // Income operations
@@ -431,6 +553,7 @@ class ExpenseDbHelper {
       'incomes',
       where: 'date_time >= ? AND date_time < ?',
       whereArgs: [start.toIso8601String(), end.toIso8601String()],
+      orderBy: 'id DESC',
     );
     return result.map((i) => Income.fromMap(i)).toList();
   }

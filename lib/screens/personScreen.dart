@@ -3,8 +3,9 @@ import 'package:intl/intl.dart';
 
 import '../models/income.dart';
 import '../models/salariedPerson.dart';
+import '../helper/colors.dart';
+import '../widgets/appWidgets.dart';
 import '../widgets/dbHelper.dart';
-import '../helper/colors.dart' as color;
 
 class PersonScreen extends StatefulWidget {
   const PersonScreen({super.key});
@@ -81,9 +82,9 @@ class _PersonScreenState extends State<PersonScreen> {
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.grey[100], // Light gray background
+        backgroundColor: AppColor.card,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -92,30 +93,17 @@ class _PersonScreenState extends State<PersonScreen> {
             children: [
               Text(
                 person == null ? 'Add Person' : 'Edit Person',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: color.AppColor.main1Color,
+                  color: AppColor.primary,
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: 'Person Name',
-                  labelStyle: TextStyle(color: Colors.grey[700]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.grey[400]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: color.AppColor.main1Color),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                cursorColor: color.AppColor.blackColor,
+                decoration: appInputDecoration(label: 'Person Name'),
+                cursorColor: AppColor.textPrimary,
                 autofocus: true,
               ),
               const SizedBox(height: 24),
@@ -123,21 +111,11 @@ class _PersonScreenState extends State<PersonScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
-                    ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color.AppColor.main1Color,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
                     onPressed: () async {
                       if (_titleController.text.trim().isEmpty) return;
 
@@ -176,14 +154,27 @@ class _PersonScreenState extends State<PersonScreen> {
     _loadPersons();
   }
 
+  Future<void> _onReorder(int oldIndex, int newIndex) async {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final person = _persons.removeAt(oldIndex);
+      _persons.insert(newIndex, person);
+    });
+    await _dbHelper.updateSalariedPersonsOrder(_persons);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColor.pageBackground,
       appBar: AppBar(
         title: const Text('Salaried Persons'),
+        automaticallyImplyLeading: false,
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           children: [
             if (_persons.isEmpty)
@@ -197,57 +188,60 @@ class _PersonScreenState extends State<PersonScreen> {
               )
             else
               Expanded(
-                child: ListView.builder(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   itemCount: _persons.length,
+                  onReorder: _onReorder,
                   itemBuilder: (context, index) {
                     final person = _persons[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      color: Colors.grey[50],
-                      child: ListTile(
-                        title: Text(
-                          person.title,
-                          style: TextStyle(color: color.AppColor.gray1Color),
-                        ),
-                        trailing: InkWell(
-                          child: Text(
-                            _showSalary
-                                ? NumberFormat('#,##0')
-                                    .format(_fetchPersonSalary(person.id!))
-                                : "****",
-                            style: TextStyle(
-                              color: color.AppColor.main1Color,
-                              fontWeight: FontWeight.bold,
+                    return AppCard(
+                      key: ValueKey(person.id),
+                      onLongPress: () => _showPersonDialog(person: person),
+                      child: Row(
+                        children: [
+                          ReorderableDragStartListener(
+                            index: index,
+                            child: const Icon(
+                              Icons.drag_handle,
+                              color: AppColor.textSecondary,
                             ),
                           ),
-                          onDoubleTap: () {
-                            setState(() {
-                              _showSalary = !_showSalary;
-                            });
-                          },
-                        ),
-                        onLongPress: () => _showPersonDialog(person: person),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              person.title,
+                              style: const TextStyle(
+                                color: AppColor.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onDoubleTap: () {
+                              setState(() {
+                                _showSalary = !_showSalary;
+                              });
+                            },
+                            child: Text(
+                              _showSalary
+                                  ? NumberFormat('#,##0')
+                                      .format(_fetchPersonSalary(person.id!))
+                                  : '****',
+                              style: const TextStyle(
+                                color: AppColor.primary,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
               ),
-            const SizedBox(
-              height: 12,
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color.AppColor.main1Color,
-                foregroundColor: color.AppColor.whiteColor,
-                elevation: 5,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                minimumSize: const Size(double.infinity, 48),
-              ),
-              child: const Text('Add Person'),
+            const SizedBox(height: 12),
+            AppPrimaryButton(
+              label: 'Add Person',
               onPressed: () => _showPersonDialog(),
             ),
           ],

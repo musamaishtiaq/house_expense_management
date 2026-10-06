@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../helper/colors.dart';
+import '../helper/strings.dart' as string;
 import '../screens/expenseScreen.dart';
 import '../screens/incomeScreen.dart';
-import '../screens/categoryScreen.dart';
-import '../screens/personScreen.dart';
-import '../screens/moreScreen.dart';
-import '../helper/colors.dart' as color;
-import '../helper/strings.dart' as string;
+import '../widgets/appWidgets.dart';
 import '../widgets/dbHelper.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -19,6 +17,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final ExpenseDbHelper _dbHelper = ExpenseDbHelper();
   double _savings = 0;
+  double _monthIncome = 0;
+  double _monthExpense = 0;
   bool _showAmount = false;
   List<Map<String, dynamic>> _monthlySummaries = [];
 
@@ -31,355 +31,276 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     final incomes = await _dbHelper.getTotalIncomes();
     final expenses = await _dbHelper.getTotalExpenses();
+    final monthIncome = await _dbHelper.getCurrentMonthTotalIncome();
+    final monthExpense = await _dbHelper.getCurrentMonthTotalExpenses();
     final monthlySummaries = await _dbHelper.getLast12MonthsFinancialSummary();
     setState(() {
       _savings = incomes - expenses;
+      _monthIncome = monthIncome;
+      _monthExpense = monthExpense;
       _monthlySummaries = monthlySummaries;
     });
   }
 
+  String _amount(num value) {
+    return _showAmount ? NumberFormat('#,##0').format(value) : '****';
+  }
+
   @override
   Widget build(BuildContext context) {
-    double width = MediaQuery.of(context).size.width;
+    final top = MediaQuery.of(context).padding.top;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(string.AppStrings.appName),
-      ),
+      backgroundColor: AppColor.pageBackground,
       body: Column(
         children: [
           Container(
-            alignment: Alignment.centerLeft,
-            height: 32,
-            width: MediaQuery.of(context).size.width,
-            color: color.AppColor.gray1Color,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: Text(
-                'Last 12 Months',
-                style: Theme.of(context).textTheme.bodyLarge,
+            width: double.infinity,
+            padding: EdgeInsets.fromLTRB(20, top + 12, 20, 28),
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [AppColor.headerStart, AppColor.headerEnd],
               ),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  string.AppStrings.appName,
+                  style: const TextStyle(
+                    fontFamily: 'OpenSans',
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Last 12 Months',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 18),
+                const Text(
+                  'Total Savings',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onDoubleTap: () {
+                    setState(() => _showAmount = !_showAmount);
+                  },
+                  child: Text(
+                    _amount(_savings),
+                    style: const TextStyle(
+                      fontFamily: 'OpenSans',
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                InkWell(
+                  onTap: _loadData,
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.refresh, size: 18, color: Colors.white),
+                      SizedBox(width: 8),
+                      Text(
+                        'Refresh Records',
+                        style: TextStyle(color: Colors.white, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color.AppColor.main1Color,
-                  foregroundColor: Colors.white,
-                  elevation: 5,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _moneyActionCard(
+                    label: 'Income',
+                    value: _amount(_monthIncome),
+                    icon: Icons.attach_money,
+                    valueColor: AppColor.income,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const IncomeScreen(),
+                        ),
+                      );
+                    },
                   ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 ),
-                icon: const Icon(Icons.money_off),
-                label: const Text('Expense'),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ExpenseScreen(),
-                    ),
-                  );
-                },
-              ),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: color.AppColor.main1Color,
-                  foregroundColor: Colors.white,
-                  elevation: 5,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _moneyActionCard(
+                    label: 'Expense',
+                    value: _amount(_monthExpense),
+                    icon: Icons.money_off,
+                    valueColor: AppColor.expense,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ExpenseScreen(),
+                        ),
+                      );
+                    },
                   ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 ),
-                icon: const Icon(Icons.attach_money),
-                label: const Text('Income'),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const IncomeScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
+              ],
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: AppSectionLabel('Financial Summary'),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
+            child: Row(
+              children: [
+                _headerCell('Month', 2, Alignment.centerLeft),
+                _headerCell('Income', 3, Alignment.centerRight),
+                _headerCell('Expense', 3, Alignment.centerRight),
+                _headerCell('Savings', 3, Alignment.centerRight),
+              ],
+            ),
           ),
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Savings',
-                    style: TextStyle(
-                      fontFamily: 'OpenSans',
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: color.AppColor.blackColor,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Center(
-                      child: Container(
-                        width: width * 0.85,
-                        height: 80,
-                        decoration: BoxDecoration(
-                          color: color.AppColor.gray2Color,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            InkWell(
-                              child: Center(
-                                child: Text(
-                                  _showAmount
-                                      ? NumberFormat('#,##0').format(_savings)
-                                      : "****",
-                                  style: TextStyle(
-                                    fontFamily: 'OpenSans',
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: color.AppColor.blackColor,
-                                  ),
-                                ),
-                              ),
-                              onDoubleTap: () {
-                                setState(() {
-                                  _showAmount = !_showAmount;
-                                });
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            InkWell(
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.refresh, size: 20),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Refresh Records',
-                                    style: TextStyle(
-                                      fontFamily: 'OpenSans',
-                                      fontSize: 14,
-                                      color: color.AppColor.blackColor,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              onTap: () {
-                                _loadData();
-                              },
-                            ),
-                          ],
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              itemCount: _monthlySummaries.length,
+              itemBuilder: (context, index) {
+                final month = _monthlySummaries[index];
+                final savings = month['savings'] as double;
+                final isPositive = savings >= 0;
+                return AppCard(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          month['month'] as String,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: AppColor.textPrimary,
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  Text(
-                    'Financial Summary',
-                    style: TextStyle(
-                      fontFamily: 'OpenSans',
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: color.AppColor.blackColor,
-                    ),
-                  ),
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
+                      Expanded(
+                        flex: 3,
+                        child: Align(
+                          alignment: Alignment.centerRight,
                           child: Text(
-                            'Month',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: color.AppColor.gray1Color,
+                            _amount(month['total_income'] as num),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: AppColor.income,
                             ),
                           ),
                         ),
-                        Expanded(
-                          flex: 3,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              'Income',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: color.AppColor.gray1Color,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              'Expense',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: color.AppColor.gray1Color,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          flex: 3,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Text(
-                              'Savings',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: color.AppColor.gray1Color,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: ListView.builder(
-                        itemCount: _monthlySummaries.length,
-                        itemBuilder: (context, index) {
-                          final month = _monthlySummaries[index];
-                          final isPositiveSavings =
-                              (month['savings'] as double) >= 0;
-
-                          return Container(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Row(
-                              children: [
-                                // Month Column
-                                Expanded(
-                                  flex: 2,
-                                  child: Text(
-                                    month['month'] as String,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w500,
-                                      color: color.AppColor.gray1Color,
-                                    ),
-                                  ),
-                                ),
-
-                                // Income Column
-                                Expanded(
-                                  flex: 3,
-                                  child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      _showAmount
-                                          ? NumberFormat('#,##0')
-                                              .format(month['total_income'])
-                                          : "****",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.green,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                // Expense Column
-                                Expanded(
-                                  flex: 3,
-                                  child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      _showAmount
-                                          ? NumberFormat('#,##0')
-                                              .format(month['total_expense'])
-                                          : "****",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        color: Colors.red,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                // Savings Column
-                                Expanded(
-                                  flex: 3,
-                                  child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: Text(
-                                      _showAmount
-                                          ? NumberFormat('#,##0')
-                                              .format(month['savings'])
-                                          : "****",
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w500,
-                                        color: isPositiveSavings
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
                       ),
-                    ),
+                      Expanded(
+                        flex: 3,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            _amount(month['total_expense'] as num),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: AppColor.expense,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 3,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            _amount(savings),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isPositive
+                                  ? AppColor.income
+                                  : AppColor.expense,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: 0,
-        onTap: (index) {
-          if (index == 1) {
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => const CategoryScreen()));
-          } else if (index == 2) {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const PersonScreen()));
-          } else if (index == 3) {
-            Navigator.push(context,
-                MaterialPageRoute(builder: (context) => const MoreScreen()));
-          }
-        },
-        selectedItemColor: color.AppColor.main1Color,
-        unselectedItemColor: color.AppColor.gray1Color,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Home',
+    );
+  }
+
+  Widget _headerCell(String text, int flex, Alignment alignment) {
+    return Expanded(
+      flex: flex,
+      child: Align(
+        alignment: alignment,
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColor.textSecondary,
+            fontSize: 12,
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.category),
-            label: 'Category',
+        ),
+      ),
+    );
+  }
+
+  Widget _moneyActionCard({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color valueColor,
+    required VoidCallback onTap,
+  }) {
+    return AppCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            backgroundColor: AppColor.chipFill,
+            child: Icon(icon, color: valueColor),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Person',
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColor.textSecondary,
+              fontSize: 13,
+            ),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.more_horiz),
-            label: 'More',
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'OpenSans',
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+              color: valueColor,
+            ),
           ),
         ],
       ),

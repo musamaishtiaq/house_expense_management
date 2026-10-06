@@ -3,8 +3,9 @@ import 'package:intl/intl.dart';
 
 import '../models/income.dart';
 import '../models/salariedPerson.dart';
+import '../helper/colors.dart';
+import '../widgets/appWidgets.dart';
 import '../widgets/dbHelper.dart';
-import '../helper/colors.dart' as color;
 
 class IncomeScreen extends StatefulWidget {
   const IncomeScreen({super.key});
@@ -25,11 +26,16 @@ class _IncomeScreenState extends State<IncomeScreen> {
   SalariedPerson? _selectedPerson;
   Income? _editingIncome;
   bool _showAggregated = false;
-  final DateTime _currentDate = DateTime.now();
+  int? _expandedPersonId;
+  late DateTime _rangeStart;
+  late DateTime _rangeEnd;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _rangeStart = DateTime(now.year, now.month, 1);
+    _rangeEnd = DateTime(now.year, now.month, now.day);
     _loadData();
   }
 
@@ -41,8 +47,13 @@ class _IncomeScreenState extends State<IncomeScreen> {
     super.dispose();
   }
 
+  DateTime _dateOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
+
   Future<void> _loadData() async {
-    final incomes = await _dbHelper.getLast3MonthsIncomes();
+    final start = _dateOnly(_rangeStart);
+    final endExclusive = _dateOnly(_rangeEnd).add(const Duration(days: 1));
+    final incomes = await _dbHelper.getIncomesByDateRange(start, endExclusive);
     final persons = await _dbHelper.getAllSalariedPersons();
     setState(() {
       _incomes = incomes;
@@ -56,62 +67,102 @@ class _IncomeScreenState extends State<IncomeScreen> {
 
   void _applyFilter() {
     if (_showAggregated) {
-      // Create monthly aggregates
-      final Map<String, Income> monthlyAggregates = {};
-
-      // List of target months (current + past 2)
-      final List<DateTime> targetMonths = List.generate(3, (i) {
-        final month = _currentDate.month - i;
-        final year = _currentDate.year;
-        return DateTime(year, month);
-      });
-
+      final Map<int, Income> aggregates = {};
       for (final income in _incomes) {
-      final incomeMonth = DateTime(income.dateTime.year, income.dateTime.month);
-
-      // Check if the income is from any of the target months
-      if (targetMonths.any((m) => m.year == incomeMonth.year && m.month == incomeMonth.month)) {
-        final key = '${income.salariedPersonId}_${incomeMonth.year}_${incomeMonth.month}';
-
-        if (monthlyAggregates.containsKey(key)) {
-          monthlyAggregates[key]!.amount += income.amount;
+        final key = income.salariedPersonId;
+        if (aggregates.containsKey(key)) {
+          aggregates[key]!.amount += income.amount;
         } else {
-          monthlyAggregates[key] = Income(
-            id: income.salariedPersonId, // key as unique ID (string)
+          aggregates[key] = Income(
+            id: income.salariedPersonId,
             salariedPersonId: income.salariedPersonId,
             amount: income.amount,
-            dateTime: incomeMonth,
-            description: 'Monthly Total',
+            dateTime: income.dateTime,
+            description: 'Range Total',
           );
         }
       }
-    }
-
-      _filteredIncomes = monthlyAggregates.values.toList();
+      _filteredIncomes = aggregates.values.toList();
     } else {
-      // Show all entries
       _filteredIncomes = List.from(_incomes);
     }
+  }
+
+  Future<void> _pickRangeDate({required bool isStart}) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isStart ? _rangeStart : _rangeEnd,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColor.primary,
+              onPrimary: Colors.white,
+              onSurface: Colors.black,
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: AppColor.primary,
+              ),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+
+    setState(() {
+      if (isStart) {
+        _rangeStart = _dateOnly(picked);
+        if (_rangeStart.isAfter(_rangeEnd)) {
+          _rangeEnd = _rangeStart;
+        }
+      } else {
+        _rangeEnd = _dateOnly(picked);
+        if (_rangeEnd.isBefore(_rangeStart)) {
+          _rangeStart = _rangeEnd;
+        }
+      }
+    });
+    await _loadData();
   }
 
   void _toggleFilter() {
     setState(() {
       _showAggregated = !_showAggregated;
+      _expandedPersonId = null;
       _applyFilter();
     });
   }
 
-  void _showIncomeDialog({Income? income}) {
+  void _togglePersonExpand(int personId) {
+    setState(() {
+      _expandedPersonId = _expandedPersonId == personId ? null : personId;
+    });
+  }
+
+  Future<void> _showIncomeDialog({Income? income}) async {
     _editingIncome = income;
+    final persons = await _dbHelper.getAllSalariedPersons();
+    if (!mounted) return;
+    _salariedPersons = persons;
+
     _selectedDate = income?.dateTime ?? DateTime.now();
     _dateController.text =
         '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}';
     _amountController.text = income?.amount.toStringAsFixed(0) ?? '';
     _descriptionController.text = income?.description ?? '';
-    _selectedPerson = _salariedPersons.firstWhere(
-      (person) => person.id == income?.salariedPersonId,
-      orElse: () => _salariedPersons.first,
-    );
+    if (persons.isEmpty) {
+      _selectedPerson = null;
+    } else {
+      _selectedPerson = persons.firstWhere(
+        (person) => person.id == income?.salariedPersonId,
+        orElse: () => persons.first,
+      );
+    }
 
     showDialog(
       context: context,
@@ -128,14 +179,14 @@ class _IncomeScreenState extends State<IncomeScreen> {
                   return Theme(
                     data: Theme.of(context).copyWith(
                       colorScheme: ColorScheme.light(
-                        primary: color.AppColor.main1Color, // Header color
+                        primary: AppColor.primary, // Header color
                         onPrimary: Colors.white, // Header text color
                         onSurface: Colors.black, // Calendar text color
                       ),
                       textButtonTheme: TextButtonThemeData(
                         style: TextButton.styleFrom(
                           foregroundColor:
-                              color.AppColor.main1Color, // Button color
+                              AppColor.primary, // Button color
                         ),
                       ),
                     ),
@@ -154,9 +205,9 @@ class _IncomeScreenState extends State<IncomeScreen> {
             }
 
             return Dialog(
-              backgroundColor: Colors.grey[100],
+              backgroundColor: AppColor.card,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(20),
               ),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16.0),
@@ -168,7 +219,7 @@ class _IncomeScreenState extends State<IncomeScreen> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: color.AppColor.main1Color,
+                        color: AppColor.primary,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -176,16 +227,8 @@ class _IncomeScreenState extends State<IncomeScreen> {
                     // Salaried Person Dropdown
                     DropdownButtonFormField<SalariedPerson>(
                       value: _selectedPerson,
-                      decoration: InputDecoration(
-                        labelText: 'Salaried Person',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
-                      ),
+                      decoration:
+                          appInputDecoration(label: 'Salaried Person'),
                       items: _salariedPersons.map((person) {
                         return DropdownMenuItem<SalariedPerson>(
                           value: person,
@@ -203,18 +246,11 @@ class _IncomeScreenState extends State<IncomeScreen> {
                     // Amount Field
                     TextField(
                       controller: _amountController,
-                      decoration: InputDecoration(
-                        labelText: 'Amount',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
+                      decoration: appInputDecoration(
+                        label: 'Amount',
                         prefixText: 'Rs ',
                       ),
-                      cursorColor: color.AppColor.blackColor,
+                      cursorColor: AppColor.textPrimary,
                       keyboardType:
                           TextInputType.numberWithOptions(decimal: true),
                     ),
@@ -224,18 +260,11 @@ class _IncomeScreenState extends State<IncomeScreen> {
                     TextField(
                       controller: _dateController,
                       readOnly: true,
-                      decoration: InputDecoration(
-                        labelText: 'Date',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
+                      decoration: appInputDecoration(
+                        label: 'Date',
                         suffixIcon: IconButton(
-                          icon: Icon(Icons.calendar_today,
-                              color: color.AppColor.main1Color),
+                          icon: const Icon(Icons.calendar_today,
+                              color: AppColor.primary),
                           onPressed: selectDate,
                         ),
                       ),
@@ -246,17 +275,10 @@ class _IncomeScreenState extends State<IncomeScreen> {
                     // Description Field
                     TextField(
                       controller: _descriptionController,
-                      decoration: InputDecoration(
-                        labelText: 'Description (Optional)',
-                        labelStyle: TextStyle(color: Colors.grey[700]),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: BorderSide(color: Colors.grey[400]!),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white,
+                      decoration: appInputDecoration(
+                        label: 'Description (Optional)',
                       ),
-                      cursorColor: color.AppColor.blackColor,
+                      cursorColor: AppColor.textPrimary,
                       maxLines: 2,
                     ),
                     const SizedBox(height: 24),
@@ -266,21 +288,11 @@ class _IncomeScreenState extends State<IncomeScreen> {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.grey[700],
-                          ),
                           onPressed: () => Navigator.pop(context),
                           child: const Text('Cancel'),
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: color.AppColor.main1Color,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
                           onPressed: () async {
                             if (_selectedPerson == null ||
                                 _amountController.text.isEmpty) return;
@@ -338,58 +350,54 @@ class _IncomeScreenState extends State<IncomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColor.pageBackground,
       appBar: AppBar(
         title: const Text('Income Records'),
         actions: [
           IconButton(
             icon: Icon(
               _showAggregated ? Icons.filter_alt : Icons.filter_alt_outlined,
-              color: Colors.black,
             ),
             onPressed: _toggleFilter,
             tooltip: _showAggregated
                 ? 'Show All Entries'
-                : 'Show Monthly Aggregates',
+                : 'Show Person Totals',
           ),
         ],
       ),
       body: Column(
         children: [
-          Container(
-            alignment: Alignment.centerLeft,
-            height: 32,
-            width: MediaQuery.of(context).size.width,
-            color: color.AppColor.gray1Color,
-            child: Padding(
-              padding: const EdgeInsets.only(left: 12),
-              child: Text(
-                'Last 3 Months',
-                style: Theme.of(context).textTheme.bodyLarge,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildRangeDateField(
+                    label: 'Start',
+                    date: _rangeStart,
+                    onTap: () => _pickRangeDate(isStart: true),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildRangeDateField(
+                    label: 'End',
+                    date: _rangeEnd,
+                    onTap: () => _pickRangeDate(isStart: false),
+                  ),
+                ),
+              ],
             ),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: [
                   _buildIncomeList(),
-                  const SizedBox(
-                    height: 12,
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color.AppColor.main1Color,
-                      foregroundColor: Colors.white,
-                      elevation: 5,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 12),
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    child: const Text('Add Income'),
+                  const SizedBox(height: 12),
+                  AppPrimaryButton(
+                    label: 'Add Income',
                     onPressed: () => _showIncomeDialog(),
                   ),
                 ],
@@ -423,45 +431,173 @@ class _IncomeScreenState extends State<IncomeScreen> {
             orElse: () => SalariedPerson(title: 'Unknown'),
           );
 
-          return Card(
-            margin: const EdgeInsets.symmetric(vertical: 4),
-            color: Colors.grey[50],
-            child: ListTile(
-              title: Text(person.title),
-              subtitle: Text(
-                _showAggregated
-                    ? '${income.dateTime.month}/${income.dateTime.year}'
-                    : '${income.dateTime.day}/${income.dateTime.month}/${income.dateTime.year}',
-              ),
-              trailing: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    NumberFormat('#,##0').format(income.amount),
-                    style: TextStyle(
-                      color: color.AppColor.main1Color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  if (income.description?.isNotEmpty ?? false)
-                    Text(
-                      income.description!,
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 12,
+          if (_showAggregated) {
+            return _buildAggregatedIncomeCard(income, person);
+          }
+
+          return AppCard(
+            onLongPress: () => _showIncomeDialog(income: income),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        person.title,
+                        style: const TextStyle(
+                          color: AppColor.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
+                      Text(
+                        '${income.dateTime.day}/${income.dateTime.month}/${income.dateTime.year}',
+                        style: const TextStyle(
+                          color: AppColor.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      NumberFormat('#,##0').format(income.amount),
+                      style: const TextStyle(
+                        color: AppColor.income,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                ],
-              ),
-              onLongPress: () =>
-                  _showAggregated ? {} : _showIncomeDialog(income: income),
+                    if (income.description?.isNotEmpty ?? false)
+                      Text(
+                        income.description!,
+                        style: const TextStyle(
+                          color: AppColor.textSecondary,
+                          fontSize: 12,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                  ],
+                ),
+              ],
             ),
           );
         },
       ),
     );
+  }
+
+  Widget _buildAggregatedIncomeCard(Income income, SalariedPerson person) {
+    final isExpanded = _expandedPersonId == income.salariedPersonId;
+    final entries = _entriesForPerson(income.salariedPersonId);
+
+    return AppCard(
+      onTap: () => _togglePersonExpand(income.salariedPersonId),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  person.title,
+                  style: const TextStyle(
+                    color: AppColor.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    NumberFormat('#,##0').format(income.amount),
+                    style: const TextStyle(
+                      color: AppColor.income,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(
+                    '${entries.length} entries',
+                    style: const TextStyle(
+                      color: AppColor.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              Icon(
+                isExpanded ? Icons.expand_less : Icons.expand_more,
+                color: AppColor.textSecondary,
+              ),
+            ],
+          ),
+          if (isExpanded)
+            ...entries.map((entry) {
+              return InkWell(
+                onLongPress: () => _showIncomeDialog(income: entry),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${entry.dateTime.day}/${entry.dateTime.month}/${entry.dateTime.year}',
+                          style: const TextStyle(
+                            color: AppColor.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        NumberFormat('#,##0').format(entry.amount),
+                        style: const TextStyle(
+                          color: AppColor.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRangeDateField({
+    required String label,
+    required DateTime date,
+    required VoidCallback onTap,
+  }) {
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppColor.textSecondary, fontSize: 11),
+          ),
+          Text(
+            '${date.day}/${date.month}/${date.year}',
+            style: const TextStyle(
+              color: AppColor.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Income> _entriesForPerson(int personId) {
+    return _incomes.where((e) => e.salariedPersonId == personId).toList();
   }
 }

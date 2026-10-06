@@ -3,8 +3,9 @@ import 'package:intl/intl.dart';
 
 import '../models/expenseCategory.dart';
 import '../models/expenseSubCategory.dart';
+import '../helper/colors.dart';
+import '../widgets/appWidgets.dart';
 import '../widgets/dbHelper.dart';
-import '../helper/colors.dart' as color;
 
 class SubCategoryScreen extends StatefulWidget {
   final ExpenseCategory category;
@@ -19,6 +20,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
   final ExpenseDbHelper _dbHelper = ExpenseDbHelper();
   List<ExpenseSubCategory> _subCategories = [];
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _budgetController = TextEditingController();
   ExpenseSubCategory? _editingSubCategory;
   Map<int, double> _monthlyExpense = {};
 
@@ -32,6 +34,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
   @override
   void dispose() {
     _titleController.dispose();
+    _budgetController.dispose();
     super.dispose();
   }
 
@@ -60,13 +63,20 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
   void _showSubCategoryDialog({ExpenseSubCategory? subCategory}) {
     _editingSubCategory = subCategory;
     _titleController.text = subCategory?.title ?? '';
+    _budgetController.text = (subCategory == null || subCategory.budget == 0)
+        ? ''
+        : subCategory.budget.toStringAsFixed(
+            subCategory.budget.truncateToDouble() == subCategory.budget
+                ? 0
+                : 2,
+          );
 
     showDialog(
       context: context,
       builder: (context) => Dialog(
-        backgroundColor: Colors.grey[100],
+        backgroundColor: AppColor.card,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -75,68 +85,60 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
             children: [
               Text(
                 subCategory == null ? 'Add SubCategory' : 'Edit SubCategory',
-                style: TextStyle(
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: color.AppColor.main1Color,
+                  color: AppColor.primary,
                 ),
               ),
               const SizedBox(height: 16),
               Text(
                 'For: ${widget.category.title}',
-                style: TextStyle(
-                  color: Colors.grey[700],
+                style: const TextStyle(
+                  color: AppColor.textSecondary,
                   fontStyle: FontStyle.italic,
                 ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: 'SubCategory Name',
-                  labelStyle: TextStyle(color: Colors.grey[700]),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: Colors.grey[400]!),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide(color: color.AppColor.main1Color),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                cursorColor: color.AppColor.blackColor,
+                decoration: appInputDecoration(label: 'SubCategory Name'),
+                cursorColor: AppColor.textPrimary,
                 autofocus: true,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _budgetController,
+                decoration: appInputDecoration(
+                  label: 'Monthly Budget (Optional)',
+                  prefixText: 'Rs ',
+                ),
+                cursorColor: AppColor.textPrimary,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
               ),
               const SizedBox(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   TextButton(
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey[700],
-                    ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text('Cancel'),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color.AppColor.main1Color,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
                     onPressed: () async {
                       if (_titleController.text.trim().isEmpty) return;
+
+                      final budget =
+                          double.tryParse(_budgetController.text.trim()) ?? 0;
 
                       if (_editingSubCategory == null) {
                         await _dbHelper.insertExpenseSubCategory(
                           ExpenseSubCategory(
                             title: _titleController.text.trim(),
                             expenseCategoryId: widget.category.id!,
+                            budget: budget,
                           ),
                         );
                       } else {
@@ -145,11 +147,13 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                             id: _editingSubCategory!.id,
                             title: _titleController.text.trim(),
                             expenseCategoryId: widget.category.id!,
+                            budget: budget,
                           ),
                         );
                       }
 
                       _titleController.clear();
+                      _budgetController.clear();
                       Navigator.pop(context);
                       _loadSubCategories();
                     },
@@ -169,14 +173,26 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
     _loadSubCategories();
   }
 
+  Future<void> _onReorder(int oldIndex, int newIndex) async {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final subCategory = _subCategories.removeAt(oldIndex);
+      _subCategories.insert(newIndex, subCategory);
+    });
+    await _dbHelper.updateExpenseSubCategoriesOrder(_subCategories);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColor.pageBackground,
       appBar: AppBar(
-        title: Text(widget.category.title), // Show category title in app bar
+        title: Text(widget.category.title),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         child: Column(
           children: [
             if (_subCategories.isEmpty)
@@ -190,49 +206,78 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
               )
             else
               Expanded(
-                child: ListView.builder(
+                child: ReorderableListView.builder(
+                  buildDefaultDragHandles: false,
                   itemCount: _subCategories.length,
+                  onReorder: _onReorder,
                   itemBuilder: (context, index) {
                     final subCategory = _subCategories[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 4),
-                      color: Colors.grey[50],
-                      child: ListTile(
-                        title: Text(
-                          subCategory.title,
-                          style: TextStyle(color: color.AppColor.gray1Color),
-                        ),
-                        trailing: Text(
-                          NumberFormat('#,##0').format(
-                              _fetchSubCategoryExpense(subCategory.id!)),
-                          style: TextStyle(
-                            color: color.AppColor.main1Color,
-                            fontWeight: FontWeight.bold,
+                    final actual =
+                        _fetchSubCategoryExpense(subCategory.id!);
+                    final overBudget = subCategory.budget > 0 &&
+                        actual > subCategory.budget;
+                    return AppCard(
+                      key: ValueKey(subCategory.id),
+                      onLongPress: () =>
+                          _showSubCategoryDialog(subCategory: subCategory),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              ReorderableDragStartListener(
+                                index: index,
+                                child: const Icon(
+                                  Icons.drag_handle,
+                                  color: AppColor.textSecondary,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  subCategory.title,
+                                  style: const TextStyle(
+                                    color: AppColor.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    NumberFormat('#,##0').format(actual),
+                                    style: TextStyle(
+                                      color: overBudget
+                                          ? AppColor.expense
+                                          : AppColor.primary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  if (subCategory.budget > 0)
+                                    Text(
+                                      'Budget ${NumberFormat('#,##0').format(subCategory.budget)}',
+                                      style: const TextStyle(
+                                        color: AppColor.textSecondary,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
                           ),
-                        ),
-                        onLongPress: () =>
-                            _showSubCategoryDialog(subCategory: subCategory),
+                          AppBudgetBar(
+                            actual: actual,
+                            budget: subCategory.budget,
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
               ),
-            const SizedBox(
-              height: 12,
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color.AppColor.main1Color,
-                foregroundColor: color.AppColor.whiteColor,
-                elevation: 5,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                minimumSize: const Size(double.infinity, 48),
-              ),
-              child: const Text('Add SubCategory'),
+            const SizedBox(height: 12),
+            AppPrimaryButton(
+              label: 'Add SubCategory',
               onPressed: () => _showSubCategoryDialog(),
             ),
           ],
