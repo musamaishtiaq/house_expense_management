@@ -127,16 +127,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  Future<void> _pickRangeDate({required bool isStart}) async {
-    final picked = await showDatePicker(
+  Future<void> _pickDateRange() async {
+    final picked = await showDateRangePicker(
       context: context,
-      initialDate: isStart ? _rangeStart : _rangeEnd,
       firstDate: DateTime(2000),
       lastDate: DateTime(2101),
+      initialDateRange: DateTimeRange(start: _rangeStart, end: _rangeEnd),
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
+            colorScheme: const ColorScheme.light(
               primary: AppColor.primary,
               onPrimary: Colors.white,
               onSurface: Colors.black,
@@ -154,17 +154,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (picked == null) return;
 
     setState(() {
-      if (isStart) {
-        _rangeStart = _dateOnly(picked);
-        if (_rangeStart.isAfter(_rangeEnd)) {
-          _rangeEnd = _rangeStart;
-        }
-      } else {
-        _rangeEnd = _dateOnly(picked);
-        if (_rangeEnd.isBefore(_rangeStart)) {
-          _rangeStart = _rangeEnd;
-        }
-      }
+      _rangeStart = _dateOnly(picked.start);
+      _rangeEnd = _dateOnly(picked.end);
     });
     await _loadData();
   }
@@ -464,25 +455,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildRangeDateField(
-                    label: 'Start',
-                    date: _rangeStart,
-                    onTap: () => _pickRangeDate(isStart: true),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildRangeDateField(
-                    label: 'End',
-                    date: _rangeEnd,
-                    onTap: () => _pickRangeDate(isStart: false),
-                  ),
-                ),
-              ],
-            ),
+            child: _buildRangeDateField(onTap: _pickDateRange),
           ),
           Expanded(
             child: Padding(
@@ -583,28 +556,37 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildRangeDateField({
-    required String label,
-    required DateTime date,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildRangeDateField({required VoidCallback onTap}) {
+    final startLabel =
+        '${_rangeStart.day}/${_rangeStart.month}/${_rangeStart.year}';
+    final endLabel = '${_rangeEnd.day}/${_rangeEnd.month}/${_rangeEnd.year}';
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(
-            label,
-            style: const TextStyle(color: AppColor.textSecondary, fontSize: 11),
-          ),
-          Text(
-            '${date.day}/${date.month}/${date.year}',
-            style: const TextStyle(
-              color: AppColor.textPrimary,
-              fontWeight: FontWeight.w600,
+          const Icon(Icons.date_range, color: AppColor.primary, size: 22),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Date range',
+                  style: TextStyle(color: AppColor.textSecondary, fontSize: 11),
+                ),
+                Text(
+                  '$startLabel – $endLabel',
+                  style: const TextStyle(
+                    color: AppColor.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
+          const Icon(Icons.calendar_today,
+              size: 18, color: AppColor.textSecondary),
         ],
       ),
     );

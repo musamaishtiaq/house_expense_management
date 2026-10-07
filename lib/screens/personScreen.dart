@@ -20,6 +20,7 @@ class _PersonScreenState extends State<PersonScreen> {
   final TextEditingController _titleController = TextEditingController();
   SalariedPerson? _editingPerson;
   bool _showSalary = false;
+  bool _reorderMode = false;
   final DateTime _currentDate = DateTime.now();
 
   @override
@@ -172,6 +173,15 @@ class _PersonScreenState extends State<PersonScreen> {
       appBar: AppBar(
         title: const Text('Salaried Persons'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            tooltip: _reorderMode ? 'Done rearranging' : 'Rearrange items',
+            icon: Icon(_reorderMode ? Icons.done : Icons.reorder),
+            onPressed: () {
+              setState(() => _reorderMode = !_reorderMode);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -191,22 +201,26 @@ class _PersonScreenState extends State<PersonScreen> {
                 child: ReorderableListView.builder(
                   buildDefaultDragHandles: false,
                   itemCount: _persons.length,
-                  onReorder: _onReorder,
+                  onReorder: _reorderMode ? _onReorder : (_, __) {},
                   itemBuilder: (context, index) {
                     final person = _persons[index];
                     return AppCard(
                       key: ValueKey(person.id),
-                      onLongPress: () => _showPersonDialog(person: person),
+                      onLongPress: _reorderMode
+                          ? null
+                          : () => _showPersonDialog(person: person),
                       child: Row(
                         children: [
-                          ReorderableDragStartListener(
-                            index: index,
-                            child: const Icon(
-                              Icons.drag_handle,
-                              color: AppColor.textSecondary,
+                          if (_reorderMode) ...[
+                            ReorderableDragStartListener(
+                              index: index,
+                              child: const Icon(
+                                Icons.drag_handle,
+                                color: AppColor.textSecondary,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
+                            const SizedBox(width: 8),
+                          ],
                           Expanded(
                             child: Text(
                               person.title,

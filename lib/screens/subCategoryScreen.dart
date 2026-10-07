@@ -23,6 +23,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
   final TextEditingController _budgetController = TextEditingController();
   ExpenseSubCategory? _editingSubCategory;
   Map<int, double> _monthlyExpense = {};
+  bool _reorderMode = false;
 
   @override
   void initState() {
@@ -190,6 +191,15 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
       backgroundColor: AppColor.pageBackground,
       appBar: AppBar(
         title: Text(widget.category.title),
+        actions: [
+          IconButton(
+            tooltip: _reorderMode ? 'Done rearranging' : 'Rearrange items',
+            icon: Icon(_reorderMode ? Icons.done : Icons.reorder),
+            onPressed: () {
+              setState(() => _reorderMode = !_reorderMode);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -209,7 +219,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                 child: ReorderableListView.builder(
                   buildDefaultDragHandles: false,
                   itemCount: _subCategories.length,
-                  onReorder: _onReorder,
+                  onReorder: _reorderMode ? _onReorder : (_, __) {},
                   itemBuilder: (context, index) {
                     final subCategory = _subCategories[index];
                     final actual =
@@ -218,20 +228,24 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                         actual > subCategory.budget;
                     return AppCard(
                       key: ValueKey(subCategory.id),
-                      onLongPress: () =>
-                          _showSubCategoryDialog(subCategory: subCategory),
+                      onLongPress: _reorderMode
+                          ? null
+                          : () =>
+                              _showSubCategoryDialog(subCategory: subCategory),
                       child: Column(
                         children: [
                           Row(
                             children: [
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: const Icon(
-                                  Icons.drag_handle,
-                                  color: AppColor.textSecondary,
+                              if (_reorderMode) ...[
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Icon(
+                                    Icons.drag_handle,
+                                    color: AppColor.textSecondary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
+                                const SizedBox(width: 8),
+                              ],
                               Expanded(
                                 child: Text(
                                   subCategory.title,

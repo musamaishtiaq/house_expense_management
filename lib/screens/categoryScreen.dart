@@ -19,6 +19,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   final TextEditingController _titleController = TextEditingController();
   ExpenseCategory? _editingCategory;
   bool _showAmount = false;
+  bool _reorderMode = false;
   Map<int, double> _monthlyExpense = {};
   Map<int, double> _categoryBudgets = {};
 
@@ -161,6 +162,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
       appBar: AppBar(
         title: const Text('Expense Categories'),
         automaticallyImplyLeading: false,
+        actions: [
+          IconButton(
+            tooltip: _reorderMode ? 'Done rearranging' : 'Rearrange items',
+            icon: Icon(_reorderMode ? Icons.done : Icons.reorder),
+            onPressed: () {
+              setState(() => _reorderMode = !_reorderMode);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -180,7 +190,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 child: ReorderableListView.builder(
                   buildDefaultDragHandles: false,
                   itemCount: _categories.length,
-                  onReorder: _onReorder,
+                  onReorder: _reorderMode ? _onReorder : (_, __) {},
                   itemBuilder: (context, index) {
                     final category = _categories[index];
                     final actual = _fetchCategoryExpense(category.id!);
@@ -188,31 +198,36 @@ class _CategoryScreenState extends State<CategoryScreen> {
                     final overBudget = budget > 0 && actual > budget;
                     return AppCard(
                       key: ValueKey(category.id),
-                      onTap: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                SubCategoryScreen(category: category),
-                          ),
-                        );
-                        _loadCategories();
-                        _loadData();
-                      },
-                      onLongPress: () =>
-                          _showCategoryDialog(category: category),
+                      onTap: _reorderMode
+                          ? null
+                          : () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      SubCategoryScreen(category: category),
+                                ),
+                              );
+                              _loadCategories();
+                              _loadData();
+                            },
+                      onLongPress: _reorderMode
+                          ? null
+                          : () => _showCategoryDialog(category: category),
                       child: Column(
                         children: [
                           Row(
                             children: [
-                              ReorderableDragStartListener(
-                                index: index,
-                                child: const Icon(
-                                  Icons.drag_handle,
-                                  color: AppColor.textSecondary,
+                              if (_reorderMode) ...[
+                                ReorderableDragStartListener(
+                                  index: index,
+                                  child: const Icon(
+                                    Icons.drag_handle,
+                                    color: AppColor.textSecondary,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
+                                const SizedBox(width: 8),
+                              ],
                               Expanded(
                                 child: Text(
                                   category.title,

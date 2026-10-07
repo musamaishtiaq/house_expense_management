@@ -213,7 +213,9 @@ class _ExpenseInsightScreenState extends State<ExpenseInsightScreen> {
                         _amountRow('Total actual expense', _totalActual),
                         const Divider(color: AppColor.divider),
                         _amountRow(
-                          overBasic ? 'Over basic need' : 'Under basic need',
+                          overBasic
+                              ? 'Over basic ${_fmt(_totalBasicNeed)}'
+                              : 'Under basic ${_fmt(_totalBasicNeed)}',
                           difference.abs(),
                           valueColor: overBasic
                               ? AppColor.expense
@@ -304,16 +306,13 @@ class _ExpenseInsightScreenState extends State<ExpenseInsightScreen> {
               color: AppColor.textSecondary,
             ),
           ),
-          InkWell(
-            onDoubleTap: _toggleAmount,
-            child: Text(
-              _fmt(value),
-              style: TextStyle(
-                fontFamily: 'OpenSans',
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: valueColor ?? AppColor.primary,
-              ),
+          Text(
+            _fmt(value),
+            style: TextStyle(
+              fontFamily: 'OpenSans',
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? AppColor.primary,
             ),
           ),
         ],
@@ -381,7 +380,9 @@ class _ExpenseInsightScreenState extends State<ExpenseInsightScreen> {
                           ),
                         ),
                         Text(
-                          exceeded ? 'Over basic need' : 'Basic ${_fmt(basic)}',
+                          exceeded
+                              ? 'Over basic ${_fmt(basic)}'
+                              : 'Basic ${_fmt(basic)}',
                           style: TextStyle(
                             fontSize: 12,
                             color: exceeded
@@ -392,12 +393,9 @@ class _ExpenseInsightScreenState extends State<ExpenseInsightScreen> {
                       ],
                     ),
                   ),
-                  InkWell(
-                    onDoubleTap: _toggleAmount,
-                    child: AppAmountText(
-                      text: _fmt(actual),
-                      color: exceeded ? AppColor.expense : AppColor.primary,
-                    ),
+                  AppAmountText(
+                    text: _fmt(actual),
+                    color: exceeded ? AppColor.expense : AppColor.primary,
                   ),
                   Icon(
                     isExpanded ? Icons.expand_less : Icons.expand_more,
@@ -443,7 +441,7 @@ class _ExpenseInsightScreenState extends State<ExpenseInsightScreen> {
                                     ),
                                     Text(
                                       subExceeded
-                                          ? 'Over basic need'
+                                          ? 'Over basic ${_fmt(subBasic)}'
                                           : 'Basic ${_fmt(subBasic)}',
                                       style: TextStyle(
                                         fontSize: 11,
@@ -455,16 +453,13 @@ class _ExpenseInsightScreenState extends State<ExpenseInsightScreen> {
                                   ],
                                 ),
                               ),
-                              InkWell(
-                                onDoubleTap: _toggleAmount,
-                                child: Text(
-                                  _fmt(subActual),
-                                  style: TextStyle(
-                                    color: subExceeded
-                                        ? AppColor.expense
-                                        : AppColor.primary,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              Text(
+                                _fmt(subActual),
+                                style: TextStyle(
+                                  color: subExceeded
+                                      ? AppColor.expense
+                                      : AppColor.primary,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],

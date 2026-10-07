@@ -100,21 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                InkWell(
-                  onTap: _loadData,
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.refresh, size: 18, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text(
-                        'Refresh Records',
-                        style: TextStyle(color: Colors.white, fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -158,11 +143,20 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: AppSectionLabel('Financial Summary'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Row(
+              children: [
+                const Expanded(child: AppSectionLabel('Financial Summary')),
+                IconButton(
+                  tooltip: 'Refresh Records',
+                  onPressed: _loadData,
+                  icon: const Icon(
+                    Icons.refresh,
+                    color: AppColor.headerEnd,
+                  ),
+                ),
+              ],
             ),
           ),
           Padding(
@@ -280,19 +274,23 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor: AppColor.chipFill,
-            child: Icon(icon, color: valueColor),
+          Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppColor.chipFill,
+                child: Icon(icon, color: valueColor),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColor.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColor.textSecondary,
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 4),
           Text(
             value,
             style: TextStyle(
