@@ -210,6 +210,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
     final format = NumberFormat('#,##0');
 
     return AppCard(
+      color: AppColor.primary,
       child: Column(
         children: [
           Row(
@@ -218,7 +219,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                 child: Text(
                   'Total',
                   style: TextStyle(
-                    color: AppColor.textPrimary,
+                    color: Colors.white,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -228,15 +229,15 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                 children: [
                   Text(
                     format.format(expense),
-                    style: TextStyle(
-                      color: overBudget ? AppColor.expense : AppColor.primary,
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   Text(
                     'Budget ${format.format(budget)}',
                     style: const TextStyle(
-                      color: AppColor.textSecondary,
+                      color: Colors.white,
                       fontSize: 11,
                     ),
                   ),
@@ -244,7 +245,12 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
               ),
             ],
           ),
-          AppBudgetBar(actual: expense, budget: budget),
+          AppBudgetBar(
+            actual: expense,
+            budget: budget,
+            barColor: overBudget ? AppColor.expense : Colors.white,
+            trackColor: Colors.white24,
+          ),
         ],
       ),
     );

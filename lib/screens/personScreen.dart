@@ -76,6 +76,16 @@ class _PersonScreenState extends State<PersonScreen> {
         : 0;
   }
 
+  double get _totalSalary {
+    var total = 0.0;
+    for (final person in _persons) {
+      final id = person.id;
+      if (id == null) continue;
+      total += _fetchPersonSalary(id);
+    }
+    return total;
+  }
+
   void _showPersonDialog({SalariedPerson? person}) {
     _editingPerson = person;
     _titleController.text = person?.title ?? '';
@@ -166,6 +176,40 @@ class _PersonScreenState extends State<PersonScreen> {
     await _dbHelper.updateSalariedPersonsOrder(_persons);
   }
 
+  Widget _buildTotalCard() {
+    final salary = _totalSalary;
+    final format = NumberFormat('#,##0');
+
+    return AppCard(
+      color: AppColor.primary,
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Total',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          InkWell(
+            onDoubleTap: () {
+              setState(() => _showSalary = !_showSalary);
+            },
+            child: Text(
+              _showSalary ? format.format(salary) : '****',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -196,7 +240,8 @@ class _PersonScreenState extends State<PersonScreen> {
                   ),
                 ),
               )
-            else
+            else ...[
+              _buildTotalCard(),
               Expanded(
                 child: ReorderableListView.builder(
                   buildDefaultDragHandles: false,
@@ -253,6 +298,7 @@ class _PersonScreenState extends State<PersonScreen> {
                   },
                 ),
               ),
+            ],
             const SizedBox(height: 12),
             AppPrimaryButton(
               label: 'Add Person',

@@ -182,6 +182,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
     final format = NumberFormat('#,##0');
 
     return AppCard(
+      color: AppColor.primary,
       child: Column(
         children: [
           Row(
@@ -190,7 +191,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                 child: Text(
                   'Total',
                   style: TextStyle(
-                    color: AppColor.textPrimary,
+                    color: Colors.white,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -204,8 +205,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   children: [
                     Text(
                       _showAmount ? format.format(expense) : '****',
-                      style: TextStyle(
-                        color: overBudget ? AppColor.expense : AppColor.primary,
+                      style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -214,7 +215,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                           ? 'Budget ${format.format(budget)}'
                           : 'Budget ****',
                       style: const TextStyle(
-                        color: AppColor.textSecondary,
+                        color: Colors.white,
                         fontSize: 11,
                       ),
                     ),
@@ -223,7 +224,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ),
             ],
           ),
-          AppBudgetBar(actual: expense, budget: budget),
+          AppBudgetBar(
+            actual: expense,
+            budget: budget,
+            barColor: overBudget ? AppColor.expense : Colors.white,
+            trackColor: Colors.white24,
+          ),
         ],
       ),
     );

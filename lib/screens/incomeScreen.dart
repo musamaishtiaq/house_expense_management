@@ -65,6 +65,14 @@ class _IncomeScreenState extends State<IncomeScreen> {
     });
   }
 
+  double get _totalSalary {
+    var total = 0.0;
+    for (final income in _incomes) {
+      total += income.amount;
+    }
+    return total;
+  }
+
   void _applyFilter() {
     if (_showAggregated) {
       final Map<int, Income> aggregates = {};
@@ -367,6 +375,7 @@ class _IncomeScreenState extends State<IncomeScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: [
+                  _buildTotalCard(),
                   _buildIncomeList(),
                   const SizedBox(height: 12),
                   AppPrimaryButton(
@@ -375,6 +384,34 @@ class _IncomeScreenState extends State<IncomeScreen> {
                   ),
                 ],
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalCard() {
+    final format = NumberFormat('#,##0');
+
+    return AppCard(
+      color: AppColor.primary,
+      child: Row(
+        children: [
+          const Expanded(
+            child: Text(
+              'Total',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            format.format(_totalSalary),
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],

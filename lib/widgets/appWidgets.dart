@@ -8,6 +8,7 @@ class AppCard extends StatelessWidget {
   final EdgeInsetsGeometry margin;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final Color? color;
 
   const AppCard({
     super.key,
@@ -16,6 +17,7 @@ class AppCard extends StatelessWidget {
     this.margin = const EdgeInsets.symmetric(vertical: 6),
     this.onTap,
     this.onLongPress,
+    this.color,
   });
 
   @override
@@ -23,7 +25,7 @@ class AppCard extends StatelessWidget {
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: AppColor.card,
+        color: color ?? AppColor.card,
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
@@ -120,11 +122,15 @@ class AppAmountText extends StatelessWidget {
 class AppBudgetBar extends StatelessWidget {
   final double actual;
   final double budget;
+  final Color? barColor;
+  final Color? trackColor;
 
   const AppBudgetBar({
     super.key,
     required this.actual,
     required this.budget,
+    this.barColor,
+    this.trackColor,
   });
 
   @override
@@ -138,8 +144,8 @@ class AppBudgetBar extends StatelessWidget {
         child: LinearProgressIndicator(
           value: (actual / budget).clamp(0.0, 1.0),
           minHeight: 8,
-          backgroundColor: AppColor.chipFill,
-          color: over ? AppColor.expense : AppColor.primary,
+          backgroundColor: trackColor ?? AppColor.chipFill,
+          color: barColor ?? (over ? AppColor.expense : AppColor.primary),
         ),
       ),
     );
