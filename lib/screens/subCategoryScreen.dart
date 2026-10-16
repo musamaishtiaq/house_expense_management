@@ -61,6 +61,24 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
         : 0;
   }
 
+  double get _totalExpense {
+    var total = 0.0;
+    for (final subCategory in _subCategories) {
+      final id = subCategory.id;
+      if (id == null) continue;
+      total += _fetchSubCategoryExpense(id);
+    }
+    return total;
+  }
+
+  double get _totalBudget {
+    var total = 0.0;
+    for (final subCategory in _subCategories) {
+      total += subCategory.budget;
+    }
+    return total;
+  }
+
   void _showSubCategoryDialog({ExpenseSubCategory? subCategory}) {
     _editingSubCategory = subCategory;
     _titleController.text = subCategory?.title ?? '';
@@ -185,6 +203,53 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
     await _dbHelper.updateExpenseSubCategoriesOrder(_subCategories);
   }
 
+  Widget _buildTotalCard() {
+    final expense = _totalExpense;
+    final budget = _totalBudget;
+    final overBudget = budget > 0 && expense > budget;
+    final format = NumberFormat('#,##0');
+
+    return AppCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Total',
+                  style: TextStyle(
+                    color: AppColor.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    format.format(expense),
+                    style: TextStyle(
+                      color: overBudget ? AppColor.expense : AppColor.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Budget ${format.format(budget)}',
+                    style: const TextStyle(
+                      color: AppColor.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          AppBudgetBar(actual: expense, budget: budget),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -214,7 +279,8 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                   ),
                 ),
               )
-            else
+            else ...[
+              _buildTotalCard(),
               Expanded(
                 child: ReorderableListView.builder(
                   buildDefaultDragHandles: false,
@@ -289,6 +355,7 @@ class _SubCategoryScreenState extends State<SubCategoryScreen> {
                   },
                 ),
               ),
+            ],
             const SizedBox(height: 12),
             AppPrimaryButton(
               label: 'Add SubCategory',

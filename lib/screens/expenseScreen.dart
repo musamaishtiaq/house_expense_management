@@ -104,6 +104,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     });
   }
 
+  double get _totalExpense {
+    var total = 0.0;
+    for (final expense in _expenses) {
+      total += expense.amount;
+    }
+    return total;
+  }
+
+  double get _totalBudget {
+    var total = 0.0;
+    for (final subCategory in _allSubCategories) {
+      total += subCategory.budget;
+    }
+    return total;
+  }
+
   void _applyFilter() {
     if (_showAggregated) {
       final Map<int, Expense> aggregates = {};
@@ -462,6 +478,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Column(
                 children: [
+                  _buildTotalCard(),
                   _buildExpenseList(),
                   const SizedBox(height: 12),
                   AppPrimaryButton(
@@ -472,6 +489,53 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTotalCard() {
+    final expense = _totalExpense;
+    final budget = _totalBudget;
+    final overBudget = budget > 0 && expense > budget;
+    final format = NumberFormat('#,##0');
+
+    return AppCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Total',
+                  style: TextStyle(
+                    color: AppColor.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    format.format(expense),
+                    style: TextStyle(
+                      color: overBudget ? AppColor.expense : AppColor.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Budget ${format.format(budget)}',
+                    style: const TextStyle(
+                      color: AppColor.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          AppBudgetBar(actual: expense, budget: budget),
         ],
       ),
     );

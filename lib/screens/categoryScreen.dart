@@ -67,6 +67,26 @@ class _CategoryScreenState extends State<CategoryScreen> {
     return _categoryBudgets[categoryId] ?? 0;
   }
 
+  double get _totalExpense {
+    var total = 0.0;
+    for (final category in _categories) {
+      final id = category.id;
+      if (id == null) continue;
+      total += _fetchCategoryExpense(id);
+    }
+    return total;
+  }
+
+  double get _totalBudget {
+    var total = 0.0;
+    for (final category in _categories) {
+      final id = category.id;
+      if (id == null) continue;
+      total += _fetchCategoryBudget(id);
+    }
+    return total;
+  }
+
   void _showCategoryDialog({ExpenseCategory? category}) {
     _editingCategory = category;
     _titleController.text = category?.title ?? '';
@@ -155,6 +175,60 @@ class _CategoryScreenState extends State<CategoryScreen> {
     await _dbHelper.updateExpenseCategoriesOrder(_categories);
   }
 
+  Widget _buildTotalCard() {
+    final expense = _totalExpense;
+    final budget = _totalBudget;
+    final overBudget = budget > 0 && expense > budget;
+    final format = NumberFormat('#,##0');
+
+    return AppCard(
+      child: Column(
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Total',
+                  style: TextStyle(
+                    color: AppColor.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              InkWell(
+                onDoubleTap: () {
+                  setState(() => _showAmount = !_showAmount);
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _showAmount ? format.format(expense) : '****',
+                      style: TextStyle(
+                        color: overBudget ? AppColor.expense : AppColor.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _showAmount
+                          ? 'Budget ${format.format(budget)}'
+                          : 'Budget ****',
+                      style: const TextStyle(
+                        color: AppColor.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          AppBudgetBar(actual: expense, budget: budget),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -185,7 +259,8 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   ),
                 ),
               )
-            else
+            else ...[
+              _buildTotalCard(),
               Expanded(
                 child: ReorderableListView.builder(
                   buildDefaultDragHandles: false,
@@ -279,6 +354,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
                   },
                 ),
               ),
+            ],
             const SizedBox(height: 12),
             AppPrimaryButton(
               label: 'Add Category',
